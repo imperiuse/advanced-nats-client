@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package protobuf;
+
+message Reply {
+  string some_stuff = 1;
+};
+
+// This Example struct is equivalent to a go-struct ./examples/protocols/json/Example
+message Example_Request {
+  int64 id = 1;
+  string name = 2;
+  double price = 3;
+}
+
+message Example_Response {
+    bool status = 1;
+    string desc = 2;
+}
+
+// Marshal()([]byte, error) And Unmarshal([]byte) error will generate automatically

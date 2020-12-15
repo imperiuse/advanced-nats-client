@@ -1,0 +1,14 @@
+version: '3'
+
+services:
+  test-nats-streaming:
+    image: nats-streaming:0.19
+    container_name: test-nats-streaming
+    networks:
+      - test-nats-client
+    ports: # host_port : docker_port
+      - "4223:4222"  # for client's
+      - "8223:8222"  # for HTTP web interface
+
+networks:
+  test-nats-client: {}
