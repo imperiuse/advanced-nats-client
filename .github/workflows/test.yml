@@ -12,11 +12,11 @@ jobs:
       - name: Create Nats Streaming cluster
         run: sudo docker network create nats-streaming && sudo docker run -d -p 4223:4222 -p 8223:8222 --network nats-streaming nats-streaming:0.19
 
-      - name: Test connection to cluster
-        uses: onichandame/nats-client-action@master
-        with:
-          servers: "nats://localhost:4223"
-          cluster: "true"
+#      - name: Test connection to cluster
+#        uses: onichandame/nats-client-action@master
+#        with:
+#          servers: "nats://localhost:4223"
+#          cluster: "true"
 
       - name: Install Go
         uses: actions/setup-go@v2
