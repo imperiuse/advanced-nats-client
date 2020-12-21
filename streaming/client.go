@@ -27,7 +27,7 @@ type AdvanceNatsClient interface {
 	PublishAsync(Subj, Serializable, AckHandler) (GUID, error)
 	DefaultAckHandler() AckHandler
 	Subscribe(Subj, Serializable, Handler, ...SubscriptionOption) (Subscription, error)
-	QueueSubscribe(Subj, Qgroup, Serializable, Handler, ...SubscriptionOption) (Subscription, error)
+	QueueSubscribe(Subj, QueueGroup, Serializable, Handler, ...SubscriptionOption) (Subscription, error)
 	// General for both NATS and NATS Streaming
 	UseCustomLogger(logger.Logger)
 	NatsConn() *nats.Conn
@@ -53,17 +53,17 @@ type (
 	// Subscribe to messages within the NATS Streaming cluster.
 	// The connection is safe to use in multiple Go routines concurrently.
 	PureNatsStunConnI interface {
-		Publish(Subj, []byte) error
-		PublishAsync(Subj, []byte, AckHandler) (string, error)
-		Subscribe(Subj, MsgHandler, ...SubscriptionOption) (Subscription, error)
-		QueueSubscribe(Subj, Qgroup, MsgHandler, ...SubscriptionOption) (Subscription, error)
+		Publish(subj string, data []byte) error
+		PublishAsync(subj string, data []byte, ackHandler AckHandler) (string, error)
+		Subscribe(subj string, msgHandler MsgHandler, subscriptionOptions ...SubscriptionOption) (Subscription, error)
+		QueueSubscribe(subj string, queueGroup string, msgHandler MsgHandler, subscriptionOptions ...SubscriptionOption) (Subscription, error)
 		Close() error
 	}
 
 	Handler = func(*stan.Msg, Serializable)
 
-	Subj   = string
-	Qgroup = string
+	Subj       = nc.Subj
+	QueueGroup = nc.QueueGroup
 
 	Msg                = stan.Msg
 	MsgHandler         = stan.MsgHandler // func(msg *Msg)
@@ -202,42 +202,42 @@ func (c *client) UseCustomLogger(log logger.Logger) {
 // PublishSync will publish to the NATS Streaming cluster and wait for an ACK.
 func (c *client) PublishSync(subj Subj, data Serializable) error {
 	c.log.Debug("[PublishSync]",
-		zap.String("subj", subj),
+		zap.String("subj", string(subj)),
 	)
 	b, err := data.Marshal()
 	if err != nil {
 		c.log.Error("[PublishSync] Marshall",
-			zap.String("subj", subj),
+			zap.String("subj", string(subj)),
 			zap.Error(err),
 		)
 		return err
 	}
-	return c.sc.Publish(subj, b)
+	return c.sc.Publish(string(subj), b)
 }
 
 // PublishAsync will publish to the cluster and asynchronously process
 // the ACK or error state. It will return the GUID for the message being sent.
 func (c *client) PublishAsync(subj Subj, data Serializable, ah AckHandler) (GUID, error) {
 	c.log.Debug("[PublishAsync]",
-		zap.String("subj", subj),
+		zap.String("subj", string(subj)),
 		zap.Any("data", data),
 	)
 	b, err := data.Marshal()
 	if err != nil {
 		c.log.Error("[PublishAsync] Marshall",
-			zap.String("subj", subj),
+			zap.String("subj", string(subj)),
 			zap.Error(err))
 		return EmptyGUID, err
 	}
 
 	if ah == nil {
 		c.log.Debug("[PublishAsync] AckHandler does not set. Use DefaultAckHandler",
-			zap.String("subj", subj),
+			zap.String("subj", string(subj)),
 		)
 		ah = c.DefaultAckHandler()
 	}
 
-	return c.sc.PublishAsync(subj, b, ah)
+	return c.sc.PublishAsync(string(subj), b, ah)
 }
 
 // DefaultAckHandler - return default ack func with logging problem's, !please better use own ack handler func!
@@ -258,7 +258,7 @@ func (c *client) Subscribe(subj Subj, awaitData Serializable, handler Handler, o
 		if err := msg.Ack(); err != nil { // manual fast ack
 			c.log.Error("[Subscribe] msg.Ack() problem",
 				zap.Any("msg", msg),
-				zap.String("subj", subj),
+				zap.String("subj", string(subj)),
 				zap.Error(err))
 			return
 		}
@@ -266,14 +266,14 @@ func (c *client) Subscribe(subj Subj, awaitData Serializable, handler Handler, o
 		if msg.Redelivered {
 			c.log.Warn("[Subscribe] Redelivered msg received",
 				zap.Any("msg", msg),
-				zap.String("subj", subj))
+				zap.String("subj", string(subj)))
 			//return // TODO. THINK HERE. WHAT WE NEED TO DO?
 		}
 
 		if msg == nil {
 			c.log.Warn("[Subscribe] Msg is nil",
 				zap.Any("msg", msg),
-				zap.String("subj", subj))
+				zap.String("subj", string(subj)))
 			return
 		}
 
@@ -281,27 +281,27 @@ func (c *client) Subscribe(subj Subj, awaitData Serializable, handler Handler, o
 			c.log.Error("[Subscribe] Unmarshal",
 				zap.Error(err),
 				zap.Any("msg", msg),
-				zap.String("subj", subj))
+				zap.String("subj", string(subj)))
 			return
 		}
 
 		handler(msg, awaitData)
 	}
-	c.log.Debug("[Subscribe]", zap.String("subj", subj))
-	return c.sc.Subscribe(subj, msgHandler, opt...)
+	c.log.Debug("[Subscribe]", zap.String("subj", string(subj)))
+	return c.sc.Subscribe(string(subj), msgHandler, opt...)
 }
 
 // QueueSubscribe will perform a queue subscription with the given options to the cluster.
 // If no option is specified, DefaultSubscriptionOptions are used. The default start
 // position is to receive new messages only (messages published after the subscription is
 // registered in the cluster).
-func (c *client) QueueSubscribe(subj Subj, qgroup Qgroup, awaitData Serializable, handler Handler, opt ...SubscriptionOption) (Subscription, error) {
+func (c *client) QueueSubscribe(subj Subj, qgroup QueueGroup, awaitData Serializable, handler Handler, opt ...SubscriptionOption) (Subscription, error) {
 	opt = append(opt, stan.SetManualAckMode()) // NB! stan.StartWithLastReceived()) - начинает с последнего уже доставленного! с виду кажется дубль
 	msgHandler := func(msg *Msg) {
 		if err := msg.Ack(); err != nil { // manual fast ack
 			c.log.Error("[QueueSubscribe] msg.Ack() problem",
-				zap.String("subj", subj),
-				zap.String("qgroup", qgroup),
+				zap.String("subj", string(subj)),
+				zap.String("qgroup", string(qgroup)),
 				zap.Any("msg", msg),
 				zap.Error(err))
 			return
@@ -310,22 +310,22 @@ func (c *client) QueueSubscribe(subj Subj, qgroup Qgroup, awaitData Serializable
 		if msg.Redelivered {
 			c.log.Warn("[QueueSubscribe] Redelivered msg received",
 				zap.Any("msg", msg),
-				zap.String("subj", subj),
-				zap.String("qgroup", qgroup))
+				zap.String("subj", string(subj)),
+				zap.String("qgroup", string(qgroup)))
 			//return // TODO. THINK HERE. WHAT WE NEED TO DO?
 		}
 
 		if msg == nil {
 			c.log.Warn("[QueueSubscribe] Msg is nil",
-				zap.String("subj", subj),
-				zap.String("qgroup", qgroup))
+				zap.String("subj", string(subj)),
+				zap.String("qgroup", string(qgroup)))
 			return
 		}
 
 		if err := awaitData.Unmarshal(msg.Data); err != nil {
 			c.log.Error("[QueueSubscribe] Unmarshal",
-				zap.String("subj", subj),
-				zap.String("qgroup", qgroup),
+				zap.String("subj", string(subj)),
+				zap.String("qgroup", string(qgroup)),
 				zap.Any("msg", msg),
 				zap.Error(err))
 			return
@@ -334,8 +334,8 @@ func (c *client) QueueSubscribe(subj Subj, qgroup Qgroup, awaitData Serializable
 		handler(msg, awaitData)
 	}
 
-	c.log.Debug("[QueueSubscribe]", zap.String("subj", subj), zap.String("qgroup", qgroup))
-	return c.sc.QueueSubscribe(subj, qgroup, msgHandler, opt...)
+	c.log.Debug("[QueueSubscribe]", zap.String("subj", string(subj)), zap.String("qgroup", string(qgroup)))
+	return c.sc.QueueSubscribe(string(subj), string(qgroup), msgHandler, opt...)
 }
 
 // Nats - return advance Nats client

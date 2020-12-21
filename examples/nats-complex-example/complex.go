@@ -25,7 +25,7 @@ func main() {
 	// here server side emulate send request to client
 	go func() {
 		for {
-			subj := fmt.Sprintf("subj_%d", id)
+			subj := nc.Subj(fmt.Sprintf("subj_%d", id))
 
 			data := &pb.Example_Request{
 				Id:    1,
@@ -53,7 +53,7 @@ func main() {
 
 	// here client side reply to server
 	go func() {
-		subj := fmt.Sprintf("subj_%d", id)
+		subj := nc.Subj(fmt.Sprintf("subj_%d", id))
 
 		// VARIANT I   (I prefer this variant, it's most common and few code)
 		if _, err := client.ReplyHandler(subj, &pb.Example_Request{}, func(_ *nc.Msg, request nc.Serializable) nc.Serializable {

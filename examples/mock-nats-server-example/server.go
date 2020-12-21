@@ -21,7 +21,7 @@ func main() {
 		return
 	}
 
-	var subj = "subj"
+	var subj nc.Subj = "subj"
 
 	// here server side emulate send request to client
 	go func() {

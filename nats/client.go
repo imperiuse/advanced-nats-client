@@ -45,15 +45,15 @@ type SimpleNatsClientI interface {
 //go:generate mockery --name=PureNatsConnI
 type (
 	PureNatsConnI interface {
-		RequestWithContext(context.Context, Subj, []byte) (*Msg, error)
-		Subscribe(Subj, MsgHandler) (*Subscription, error)
-		QueueSubscribe(Subj, QueueGroup, MsgHandler) (*Subscription, error)
+		RequestWithContext(ctx context.Context, subj string, data []byte) (*Msg, error)
+		Subscribe(subj string, msgHandler MsgHandler) (*Subscription, error)
+		QueueSubscribe(subj string, queueGroup string, msgHandler MsgHandler) (*Subscription, error)
 		Drain() error
 		Close()
 	}
 
-	QueueGroup = string
-	Subj       = string
+	Subj       string
+	QueueGroup string
 
 	// client is Advance Nats client, or simple - wrapper for nats.Conn, so it's own nats client library for reduce code
 	client struct {
@@ -155,8 +155,8 @@ func (c *client) UseCustomLogger(log logger.Logger) {
 // Ping - send synchronous request with ctx deadline or timeout
 // e.g. ctx, _ := context.WithTimeout(context.Background(), time.Second)
 func (c *client) Ping(ctx context.Context, subj Subj) (bool, error) {
-	c.log.Debug("Ping", zap.String("subj", subj))
-	msg, err := c.conn.RequestWithContext(ctx, subj, []byte(pingMsg))
+	c.log.Debug("Ping", zap.String("subj", string(subj)))
+	msg, err := c.conn.RequestWithContext(ctx, string(subj), []byte(pingMsg))
 	if msg == nil {
 		return false, ErrEmptyMsg
 	}
@@ -166,10 +166,10 @@ func (c *client) Ping(ctx context.Context, subj Subj) (bool, error) {
 
 // PongHandler - register simple pong handler (use to peer-to-peer topics)
 func (c *client) PongHandler(subj Subj) (*Subscription, error) {
-	c.log.Debug("[PongHandler]", zap.String("subj", subj))
-	return c.conn.Subscribe(subj, func(msg *Msg) {
+	c.log.Debug("[PongHandler]", zap.String("subj", string(subj)))
+	return c.conn.Subscribe(string(subj), func(msg *Msg) {
 		if msg == nil {
-			c.log.Debug("Nil msg", zap.String("subj", subj))
+			c.log.Debug("Nil msg", zap.String("subj", string(subj)))
 			return
 		}
 		if string(msg.Data) == pingMsg {
@@ -180,8 +180,8 @@ func (c *client) PongHandler(subj Subj) (*Subscription, error) {
 
 // PongQueueHandler - register pong handler with QueueGroup (use to 1 to Many)
 func (c *client) PongQueueHandler(subj Subj, queue QueueGroup) (*Subscription, error) {
-	c.log.Debug("[PongQueueHandler]", zap.String("subj", subj), zap.String("queue", queue))
-	return c.conn.QueueSubscribe(subj, queue, func(msg *Msg) {
+	c.log.Debug("[PongQueueHandler]", zap.String("subj", string(subj)), zap.String("queue", string(queue)))
+	return c.conn.QueueSubscribe(string(subj), string(queue), func(msg *Msg) {
 		if msg == nil {
 			return
 		}
@@ -193,14 +193,14 @@ func (c *client) PongQueueHandler(subj Subj, queue QueueGroup) (*Subscription, e
 
 // Request - send synchronous msg to topic subj, and wait reply from another topic (e.g. Request-Reply Nats pattern)
 func (c *client) Request(ctx context.Context, subj Subj, request Serializable, reply Serializable) error {
-	c.log.Debug("[Request]", zap.String("subj", subj), zap.Any("data", request))
+	c.log.Debug("[Request]", zap.String("subj", string(subj)), zap.Any("data", request))
 
 	byteData, err := request.Marshal()
 	if err != nil {
 		return err
 	}
 
-	msg, err := c.conn.RequestWithContext(ctx, subj, byteData)
+	msg, err := c.conn.RequestWithContext(ctx, string(subj), byteData)
 	if err != nil {
 		return err
 	}
@@ -214,15 +214,15 @@ func (c *client) Request(ctx context.Context, subj Subj, request Serializable, r
 
 // ReplyHandler - register for asynchronous msgHandler func for process Nats Msg
 func (c *client) ReplyHandler(subj Subj, awaitData Serializable, msgHandler Handler) (*Subscription, error) {
-	return c.conn.Subscribe(subj, func(msg *nats.Msg) {
+	return c.conn.Subscribe(string(subj), func(msg *nats.Msg) {
 		if msg == nil {
-			c.log.Warn("[ReplyHandler] Nil msg", zap.String("subj", subj))
+			c.log.Warn("[ReplyHandler] Nil msg", zap.String("subj", string(subj)))
 			return
 		}
 
 		if err := awaitData.Unmarshal(msg.Data); err != nil {
 			c.log.Error("[ReplyHandler] Unmarshal",
-				zap.String("subj", subj),
+				zap.String("subj", string(subj)),
 				zap.Any("msg", msg),
 				zap.Error(err),
 			)
@@ -234,7 +234,7 @@ func (c *client) ReplyHandler(subj Subj, awaitData Serializable, msgHandler Hand
 		data, err := replyData.Marshal()
 		if err != nil {
 			c.log.Error("[ReplyHandler] Marshall",
-				zap.String("subj", subj),
+				zap.String("subj", string(subj)),
 				zap.Any("data", replyData),
 				zap.Error(err),
 			)
@@ -243,7 +243,7 @@ func (c *client) ReplyHandler(subj Subj, awaitData Serializable, msgHandler Hand
 
 		if err = msg.Respond(data); err != nil {
 			c.log.Error("[ReplyHandler] Respond",
-				zap.String("subj", subj),
+				zap.String("subj", string(subj)),
 				zap.Error(err),
 			)
 			return

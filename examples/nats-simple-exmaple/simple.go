@@ -17,7 +17,7 @@ func main() {
 		return
 	}
 
-	var pingSubj = "ping_topic"
+	var pingSubj nc.Subj = "ping_topic"
 	pongSubscription, err := client.PongHandler(pingSubj)
 	if err != nil {
 		fmt.Println("Something went wrong! RegisterPongHandlerRC()")
