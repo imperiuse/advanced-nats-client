@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/atomic"
+
 	"go.uber.org/zap"
 
 	"github.com/gofrs/uuid"
@@ -267,7 +269,7 @@ func (suite *NatsStreamingClientTestSuit) Test_RequestDummyTest() {
 
 	var wg sync.WaitGroup
 	wg.Add(1)
-	s, err := suite.streamingClient.ReplyHandler("Test_RequestDummyTest", &mock.DataMock{}, func(msg *nc.Msg, serializable nc.Serializable) nc.Serializable {
+	s, err := suite.streamingClient.ReplyHandler(subj, &mock.DataMock{}, func(msg *nc.Msg, serializable nc.Serializable) nc.Serializable {
 		wg.Done()
 		return &mock.DataMock{}
 	})
@@ -281,6 +283,51 @@ func (suite *NatsStreamingClientTestSuit) Test_RequestDummyTest() {
 	assert.Nil(suite.T(), err, "err must be nil")
 
 	wg.Wait()
+}
+
+func (suite *NatsStreamingClientTestSuit) Test_RequestQueueDummyTest() {
+	const (
+		timeout = time.Second
+		subj    = "Test_RequestQueueDummyTest"
+		qGroup  = "Test_RequestQueueDummyTest"
+	)
+	var cnt atomic.Int32
+	cnt.Store(0)
+
+	ctx, cancelFunc := context.WithTimeout(context.Background(), timeout)
+	defer cancelFunc()
+
+	err := suite.streamingClient.Request(ctx, subj, &mock.DataMock{}, &mock.DataMock{})
+	assert.NotNil(suite.T(), err, "must be err")
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	s, err := suite.streamingClient.ReplyQueueHandler(subj, qGroup, &mock.DataMock{}, func(msg *nc.Msg, serializable nc.Serializable) nc.Serializable {
+		cnt.Inc()
+		wg.Done()
+		return &mock.DataMock{}
+	})
+	defer func() { assert.Nil(suite.T(), s.Unsubscribe(), "must be nil") }()
+	assert.NotNil(suite.T(), s, "client must be not bil")
+	assert.Nil(suite.T(), err, "err must be nil")
+
+	s2, err := suite.streamingClient.ReplyQueueHandler(subj, qGroup, &mock.DataMock{}, func(msg *nc.Msg, serializable nc.Serializable) nc.Serializable {
+		cnt.Inc()
+		wg.Done()
+		return &mock.DataMock{}
+	})
+	defer func() { assert.Nil(suite.T(), s2.Unsubscribe(), "must be nil") }()
+	assert.NotNil(suite.T(), s2, "client must be not bil")
+	assert.Nil(suite.T(), err, "err must be nil")
+
+	ctx, cancelFunc2 := context.WithTimeout(context.Background(), timeout)
+	defer cancelFunc2()
+	err = suite.streamingClient.Request(ctx, subj, &mock.DataMock{}, &mock.DataMock{})
+	assert.Nil(suite.T(), err, "err must be nil")
+
+	wg.Wait()
+
+	assert.Equal(suite.T(), 1, int(cnt.Load()))
 }
 
 func (suite *NatsStreamingClientTestSuit) Test_CheckNilNatsClient() {

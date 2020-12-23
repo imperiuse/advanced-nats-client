@@ -38,6 +38,7 @@ type SimpleNatsClientI interface {
 	PongQueueHandler(Subj, QueueGroup) (*Subscription, error)
 	Request(context.Context, Subj, Serializable, Serializable) error
 	ReplyHandler(Subj, Serializable, Handler) (*Subscription, error)
+	ReplyQueueHandler(Subj, QueueGroup, Serializable, Handler) (*Subscription, error)
 	NatsConn() *Conn
 	Close() error
 }
@@ -244,6 +245,48 @@ func (c *client) ReplyHandler(subj Subj, awaitData Serializable, msgHandler Hand
 		if err = msg.Respond(data); err != nil {
 			c.log.Error("[ReplyHandler] Respond",
 				zap.String("subj", string(subj)),
+				zap.Error(err),
+			)
+			return
+		}
+	})
+}
+
+// ReplyQueueHandler - register queue for asynchronous msgHandler func for process Nats Msg
+func (c *client) ReplyQueueHandler(subj Subj, qGroup QueueGroup, awaitData Serializable, msgHandler Handler) (*Subscription, error) {
+	return c.conn.QueueSubscribe(string(subj), string(qGroup), func(msg *nats.Msg) {
+		if msg == nil {
+			c.log.Warn("[ReplyQueueHandler] Nil msg", zap.String("subj", string(subj)))
+			return
+		}
+
+		if err := awaitData.Unmarshal(msg.Data); err != nil {
+			c.log.Error("[ReplyQueueHandler] Unmarshal",
+				zap.String("subj", string(subj)),
+				zap.String("qGroup", string(qGroup)),
+				zap.Any("msg", msg),
+				zap.Error(err),
+			)
+			return
+		}
+
+		replyData := msgHandler(msg, awaitData)
+
+		data, err := replyData.Marshal()
+		if err != nil {
+			c.log.Error("[ReplyQueueHandler] Marshall",
+				zap.String("subj", string(subj)),
+				zap.String("qGroup", string(qGroup)),
+				zap.Any("data", replyData),
+				zap.Error(err),
+			)
+			return
+		}
+
+		if err = msg.Respond(data); err != nil {
+			c.log.Error("[ReplyQueueHandler] Respond",
+				zap.String("subj", string(subj)),
+				zap.String("qGroup", string(qGroup)),
 				zap.Error(err),
 			)
 			return

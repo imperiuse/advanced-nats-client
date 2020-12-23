@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"go.uber.org/atomic"
+
 	"go.uber.org/zap"
 
 	"github.com/pkg/errors"
@@ -215,6 +217,76 @@ func (suite *NatsClientTestSuit) Test_RequestReply() {
 	}()
 
 	wg.Wait()
+	time.Sleep(timeoutTest)
+}
+
+func (suite *NatsClientTestSuit) Test_RequestReplyQueue() {
+	const (
+		cntMsg             = 3
+		subj               = "Test_RequestReplyQueue"
+		qGroup             = "Test_RequestReplyQueue"
+		timeoutNatsRequest = time.Millisecond * 500
+		requestData        = "mock request requestData"
+		replyData          = "mock reply requestData"
+		timeoutTest        = time.Millisecond * 1000
+	)
+
+	var cnt atomic.Int32 // проверка что действительно только один из двух handler-ов обрабатывает request
+	cnt.Store(0)
+
+	ctx, cancelFunc := context.WithTimeout(context.Background(), timeoutNatsRequest)
+	defer cancelFunc()
+
+	var wg sync.WaitGroup
+	sendChan := make(chan m.DataMock, cntMsg)
+	wg.Add(cntMsg)
+	for i := 0; i < cntMsg; i++ {
+		sendChan <- m.DataMock{Data: []byte(requestData)}
+	}
+	close(sendChan)
+
+	// here server side emulate send request to client
+	go func(sendChan <-chan m.DataMock) {
+		reply := &m.DataMock{}
+		for request := range sendChan {
+			request = request
+			err := suite.natsClient.Request(ctx, subj, &request, reply)
+			assert.Nil(suite.T(), err, "Request err")
+			assert.Equal(suite.T(), replyData, string(reply.Data))
+		}
+	}(sendChan)
+
+	// here client side reply to server
+	go func() {
+		s, err := suite.natsClient.ReplyQueueHandler(subj, qGroup, &m.DataMock{}, func(msg *Msg, request Serializable) Serializable {
+			if example, ok := request.(*m.DataMock); ok {
+				assert.NotNil(suite.T(), example, "example must be non nil")
+				assert.Equal(suite.T(), requestData, string(example.Data), "wrong requestData received")
+			}
+			cnt.Inc()
+			wg.Done()
+			return &m.DataMock{Data: []byte(replyData)}
+		})
+		defer func() { assert.Nil(suite.T(), s.Unsubscribe(), "must be nil") }()
+		assert.Nil(suite.T(), err, "Reply handler err")
+
+		s2, err := suite.natsClient.ReplyQueueHandler(subj, qGroup, &m.DataMock{}, func(msg *Msg, request Serializable) Serializable {
+			if example, ok := request.(*m.DataMock); ok {
+				assert.NotNil(suite.T(), example, "example must be non nil")
+				assert.Equal(suite.T(), requestData, string(example.Data), "wrong requestData received")
+			}
+			cnt.Inc()
+			wg.Done()
+			return &m.DataMock{Data: []byte(replyData)}
+		})
+		defer func() { assert.Nil(suite.T(), s2.Unsubscribe(), "must be nil") }()
+		assert.Nil(suite.T(), err, "Reply handler err")
+
+		wg.Wait()
+	}()
+
+	wg.Wait()
+	assert.Equal(suite.T(), cntMsg, int(cnt.Load()))
 	time.Sleep(timeoutTest)
 }
 

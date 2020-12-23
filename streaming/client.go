@@ -22,6 +22,7 @@ type AdvanceNatsClient interface {
 	PongQueueHandler(nc.Subj, nc.QueueGroup) (*nc.Subscription, error)
 	Request(context.Context, Subj, Serializable, Serializable) error
 	ReplyHandler(Subj, Serializable, nc.Handler) (*nc.Subscription, error)
+	ReplyQueueHandler(Subj, QueueGroup, Serializable, nc.Handler) (*nc.Subscription, error)
 	// NATS Streaming
 	PublishSync(Subj, Serializable) error
 	PublishAsync(Subj, Serializable, AckHandler) (GUID, error)
@@ -190,6 +191,14 @@ func (c *client) ReplyHandler(subj Subj, awaitData Serializable, msgHandler nc.H
 		return nil, ErrEmptyNatsClient
 	}
 	return c.nc.ReplyHandler(subj, awaitData, msgHandler)
+}
+
+// ReplyQueueHandler under the hood used simple Advance NATS client, Reply semantic with at most once (! not at least once guarantee !)
+func (c *client) ReplyQueueHandler(subj Subj, qGroup QueueGroup, awaitData Serializable, msgHandler nc.Handler) (*nc.Subscription, error) {
+	if c.nc == nil {
+		return nil, ErrEmptyNatsClient
+	}
+	return c.nc.ReplyQueueHandler(subj, qGroup, awaitData, msgHandler)
 }
 
 func (c *client) UseCustomLogger(log logger.Logger) {
