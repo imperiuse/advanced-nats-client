@@ -194,7 +194,7 @@ func (suite *NatsClientTestSuit) Test_RequestReply() {
 	go func(sendChan <-chan m.DataMock) {
 		reply := &m.DataMock{}
 		for request := range sendChan {
-			request = request
+			request := request
 			err := suite.natsClient.Request(ctx, subj, &request, reply)
 			assert.Nil(suite.T(), err, "Request err")
 			assert.Equal(suite.T(), replyData, string(reply.Data))
@@ -249,7 +249,7 @@ func (suite *NatsClientTestSuit) Test_RequestReplyQueue() {
 	go func(sendChan <-chan m.DataMock) {
 		reply := &m.DataMock{}
 		for request := range sendChan {
-			request = request
+			request := request
 			err := suite.natsClient.Request(ctx, subj, &request, reply)
 			assert.Nil(suite.T(), err, "Request err")
 			assert.Equal(suite.T(), replyData, string(reply.Data))
@@ -308,7 +308,7 @@ func (suite *NatsClientTestSuit) Test_BadRequestReply() {
 	go func(sendChan <-chan m.BadDataMock, done chan<- struct{}) {
 		reply := &m.DataMock{}
 		for request := range sendChan {
-			request = request
+			request := request
 			err := suite.natsClient.Request(ctx, subj, &request, reply)
 			assert.NotNil(suite.T(), err, "Must be err")
 			assert.Equal(suite.T(), m.ErrBadDataMock, err, "must be err errBadDataMock")
