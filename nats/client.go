@@ -221,6 +221,8 @@ func (c *client) ReplyHandler(subj Subj, awaitData Serializable, msgHandler Hand
 			return
 		}
 
+		awaitData.Reset() // Important! For use clean struct
+
 		if err := awaitData.Unmarshal(msg.Data); err != nil {
 			c.log.Error("[ReplyHandler] Unmarshal",
 				zap.String("subj", string(subj)),
@@ -259,6 +261,8 @@ func (c *client) ReplyQueueHandler(subj Subj, qGroup QueueGroup, awaitData Seria
 			c.log.Warn("[ReplyQueueHandler] Nil msg", zap.String("subj", string(subj)))
 			return
 		}
+
+		awaitData.Reset() // Important! For use clean struct
 
 		if err := awaitData.Unmarshal(msg.Data); err != nil {
 			c.log.Error("[ReplyQueueHandler] Unmarshal",

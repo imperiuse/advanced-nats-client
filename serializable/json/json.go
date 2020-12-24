@@ -35,3 +35,7 @@ func (e *Example) Unmarshal(data []byte) error {
 	}
 	return err
 }
+
+func (e *Example) Reset() {
+	return
+}

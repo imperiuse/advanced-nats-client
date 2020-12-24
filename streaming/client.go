@@ -286,6 +286,8 @@ func (c *client) Subscribe(subj Subj, awaitData Serializable, handler Handler, o
 			return
 		}
 
+		awaitData.Reset() // Important! For use clean struct
+
 		if err := awaitData.Unmarshal(msg.Data); err != nil {
 			c.log.Error("[Subscribe] Unmarshal",
 				zap.Error(err),
@@ -330,6 +332,8 @@ func (c *client) QueueSubscribe(subj Subj, qgroup QueueGroup, awaitData Serializ
 				zap.String("qgroup", string(qgroup)))
 			return
 		}
+
+		awaitData.Reset() // Important! For use clean struct
 
 		if err := awaitData.Unmarshal(msg.Data); err != nil {
 			c.log.Error("[QueueSubscribe] Unmarshal",
