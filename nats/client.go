@@ -137,13 +137,16 @@ func (c *client) defaultNatsOptions() []Option {
 		nats.ReconnectJitter(ReconnectJitterDefault, ReconnectJitterTLSDefault),
 		nats.ReconnectWait(ReconnectWaitDefault),
 		nats.DisconnectErrHandler(func(nc *nats.Conn, err error) {
-			c.log.Warn("Got disconnected", zap.Error(err))
+			c.log.Warn("[DisconnectErrHandler] Disconnect", zap.Error(err))
 		}),
 		nats.ReconnectHandler(func(nc *nats.Conn) {
-			c.log.Warn("Got reconnected", zap.String("ConnUrl", nc.ConnectedUrl()))
+			c.log.Warn("[ReconnectHandler] Reconnect", zap.String("ConnUrl", nc.ConnectedUrl()))
 		}),
 		nats.ClosedHandler(func(nc *nats.Conn) {
-			c.log.Warn("Connection closed", zap.Error(nc.LastError()))
+			c.log.Warn("[ClosedHandler] Close handler", zap.Error(nc.LastError()))
+		}),
+		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
+			c.log.Warn("[ErrorHandler]", zap.Error(err))
 		}),
 	}
 }
