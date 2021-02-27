@@ -15,6 +15,7 @@ import (
 	"github.com/imperiuse/advance-nats-client/serializable"
 )
 
+// nolint golint
 type AdvanceNatsClient interface {
 	// NATS @see -> nc.SimpleNatsClientI
 	Ping(context.Context, nc.Subj) (bool, error)
@@ -36,6 +37,7 @@ type AdvanceNatsClient interface {
 	Close() error
 }
 
+//nolint golint
 type (
 	client struct {
 		log logger.Logger
@@ -48,6 +50,7 @@ type (
 	Option = stan.Option
 )
 
+//nolint golint
 //go:generate mockery --name=PureNatsStunConnI
 type (
 	// StunConnI represents a connection to the NATS Streaming subsystem. It can Publish and
@@ -77,32 +80,37 @@ type (
 	Serializable = serializable.Serializable
 )
 
+// EmptyGUID  "".
 const EmptyGUID = ""
 
+// nolint golint
 var (
-	DefaultDSN       = []URL{nats.DefaultURL}
 	DefaultClusterID = "test-cluster"
-	testDSN          = []URL{"nats://127.0.0.1:4223"}
 	EmptyHandler     = func(*Msg, Serializable) {}
 )
 
 var (
-	ErrEmptyNatsConn   = errors.New("empty pure nats connection from advance nats client")
-	ErrEmptyNatsClient = errors.New("empty advance nats client")
+	// ErrNilNatsConn pure nats is nil, check usage library.
+	ErrNilNatsConn = errors.New("pure nats connection from advance nats client is nil, nc.NatsConn() == nil ")
+
+	// ErrNilNatsClient pure nats client is nil, check usage library.
+	ErrNilNatsClient = errors.New("advance nats client is nil")
 )
 
-// New - Create Nats Streaming client with instance of Advance Nats client
+// New - Create Nats Streaming client with instance of Advance Nats client.
+//nolint golint
 func New(clusterID string, clientID string, nc nc.SimpleNatsClientI, options ...Option) (*client, error) {
 	if nc != nil {
 		if nc.NatsConn() == nil {
-			return nil, ErrEmptyNatsConn
+			return nil, errors.Wrap(ErrNilNatsConn, "[New]")
 		}
+
 		options = append(options, stan.NatsConn(nc.NatsConn()))
 	}
 
 	c, err := NewOnlyStreaming(clusterID, clientID, nil, options...)
 	if err != nil || c == nil {
-		return nil, err
+		return nil, errors.Wrap(err, "[New] NewOnlyStreaming")
 	}
 
 	c.nc = nc
@@ -110,8 +118,10 @@ func New(clusterID string, clientID string, nc nc.SimpleNatsClientI, options ...
 	return c, nil
 }
 
+// NewOnlyStreaming - create only streaming client.
+// nolint golint
 func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...Option) (*client, error) {
-	c := NewDefaultClient()
+	c := newDefaultClient()
 
 	// Default settings for internal NATS client
 	if len(options) == 0 {
@@ -125,7 +135,7 @@ func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...O
 
 	sc, err := stan.Connect(clusterID, clientID, options...)
 	if err != nil {
-		return nil, fmt.Errorf("can't crate nats-streaming conn. %w", err)
+		return nil, errors.Wrap(err, "[NewOnlyStreaming] can't crate nats-streaming conn")
 	}
 
 	c.sc = sc
@@ -133,7 +143,7 @@ func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...O
 	return c, nil
 }
 
-func NewDefaultClient() *client {
+func newDefaultClient() *client {
 	return &client{
 		log: logger.Log,
 	}
@@ -153,52 +163,58 @@ func (c *client) defaultNatsStreamingOptions() []Option {
 
 // Wrapper for Nats Simple Client
 
-// Ping - under the hood wrapper for nc.Ping
+// Ping - under the hood wrapper for nc.Ping.
 func (c *client) Ping(ctx context.Context, subj nc.Subj) (bool, error) {
 	if c.nc == nil {
-		return false, ErrEmptyNatsClient
+		return false, errors.Wrap(ErrNilNatsClient, "[Ping]")
 	}
+
 	return c.nc.Ping(ctx, subj)
 }
 
-// PongHandler - under the hood wrapper for nc.PongHandler
+// PongHandler - under the hood wrapper for nc.PongHandler.
 func (c *client) PongHandler(subj nc.Subj) (*nc.Subscription, error) {
 	if c.nc == nil {
-		return nil, ErrEmptyNatsClient
+		return nil, errors.Wrap(ErrNilNatsClient, "[PongHandler]")
 	}
+
 	return c.nc.PongHandler(subj)
 }
 
-// PongQueueHandler - under the hood wrapper for nc.PongQueueHandler
+// PongQueueHandler - under the hood wrapper for nc.PongQueueHandler.
 func (c *client) PongQueueHandler(subj nc.Subj, qgroup nc.QueueGroup) (*nc.Subscription, error) {
 	if c.nc == nil {
-		return nil, ErrEmptyNatsClient
+		return nil, errors.Wrap(ErrNilNatsClient, "[PongQueueHandler]")
 	}
+
 	return c.nc.PongQueueHandler(subj, qgroup)
 }
 
-// Request under the hood used simple NATS connect and simple Request - Reply semantic with at most once guarantee (! not at least !)
+// Request under the hood used simple NATS connect and simple Request-Reply semantic with at most once guarantee.
 func (c *client) Request(ctx context.Context, subj Subj, requestData Serializable, replyData Serializable) error {
 	if c.nc == nil {
-		return ErrEmptyNatsClient
+		return errors.Wrap(ErrNilNatsClient, "[Request]")
 	}
+
 	return c.nc.Request(ctx, subj, requestData, replyData)
 }
 
-// ReplyHandler under the hood used simple Advance NATS client, Reply semantic with at most once (! not at least once guarantee !)
+// ReplyHandler under the hood used simple Advance NATS client, Reply semantic with at most once.
 func (c *client) ReplyHandler(subj Subj, awaitData Serializable, msgHandler nc.Handler) (*nc.Subscription, error) {
 	if c.nc == nil {
-		return nil, ErrEmptyNatsClient
+		return nil, errors.Wrap(ErrNilNatsClient, "[ReplyHandler]")
 	}
+
 	return c.nc.ReplyHandler(subj, awaitData, msgHandler)
 }
 
-// ReplyQueueHandler under the hood used simple Advance NATS client, Reply semantic with at most once (! not at least once guarantee !)
-func (c *client) ReplyQueueHandler(subj Subj, qGroup QueueGroup, awaitData Serializable, msgHandler nc.Handler) (*nc.Subscription, error) {
+// ReplyQueueHandler under the hood used simple Advance NATS client, Reply semantic with at most once.
+func (c *client) ReplyQueueHandler(subj Subj, qG QueueGroup, awD Serializable, h nc.Handler) (*nc.Subscription, error) {
 	if c.nc == nil {
-		return nil, ErrEmptyNatsClient
+		return nil, errors.Wrap(ErrNilNatsClient, "[ReplyQueueHandler]")
 	}
-	return c.nc.ReplyQueueHandler(subj, qGroup, awaitData, msgHandler)
+
+	return c.nc.ReplyQueueHandler(subj, qG, awD, h)
 }
 
 func (c *client) UseCustomLogger(log logger.Logger) {
@@ -213,14 +229,17 @@ func (c *client) PublishSync(subj Subj, data Serializable) error {
 	c.log.Debug("[PublishSync]",
 		zap.String("subj", string(subj)),
 	)
+
 	b, err := data.Marshal()
 	if err != nil {
 		c.log.Error("[PublishSync] Marshall",
 			zap.String("subj", string(subj)),
 			zap.Error(err),
 		)
-		return err
+
+		return errors.Wrap(err, "[PublishSync]")
 	}
+
 	return c.sc.Publish(string(subj), b)
 }
 
@@ -231,18 +250,21 @@ func (c *client) PublishAsync(subj Subj, data Serializable, ah AckHandler) (GUID
 		zap.String("subj", string(subj)),
 		zap.Any("data", data),
 	)
+
 	b, err := data.Marshal()
 	if err != nil {
 		c.log.Error("[PublishAsync] Marshall",
 			zap.String("subj", string(subj)),
 			zap.Error(err))
-		return EmptyGUID, err
+
+		return EmptyGUID, errors.Wrap(err, "[PublishAsync]")
 	}
 
 	if ah == nil {
 		c.log.Debug("[PublishAsync] AckHandler does not set. Use DefaultAckHandler",
 			zap.String("subj", string(subj)),
 		)
+
 		ah = c.DefaultAckHandler()
 	}
 
@@ -260,15 +282,19 @@ func (c *client) DefaultAckHandler() AckHandler {
 	}
 }
 
-// Subscribe - func for subscribe on any subject, if no options received - default for all options append stan.SetManualAckMode()
+// Subscribe - func for subscribe on any subject, if no options received - default for all options append stan.SetManualAckMode().
+//nolint lll
 func (c *client) Subscribe(subj Subj, awaitData Serializable, handler Handler, opt ...SubscriptionOption) (Subscription, error) {
-	opt = append(opt, stan.SetManualAckMode()) // NB! stan.StartWithLastReceived()) - начинает с последнего уже доставленного! с виду кажется дубль
+	// NB! stan.StartWithLastReceived()) - начинает с последнего уже доставленного! с виду кажется дубль
+	opt = append(opt, stan.SetManualAckMode())
+
 	msgHandler := func(msg *Msg) {
 		if err := msg.Ack(); err != nil { // manual fast ack
 			c.log.Error("[Subscribe] msg.Ack() problem",
 				zap.Any("msg", msg),
 				zap.String("subj", string(subj)),
 				zap.Error(err))
+
 			return
 		}
 
@@ -276,13 +302,13 @@ func (c *client) Subscribe(subj Subj, awaitData Serializable, handler Handler, o
 			c.log.Warn("[Subscribe] Redelivered msg received",
 				zap.Any("msg", msg),
 				zap.String("subj", string(subj)))
-			//return // TODO. THINK HERE. WHAT WE NEED TO DO?
-		}
+		} // return // TODO. THINK HERE. WHAT WE NEED TO DO?
 
 		if msg == nil {
 			c.log.Warn("[Subscribe] Msg is nil",
 				zap.Any("msg", msg),
 				zap.String("subj", string(subj)))
+
 			return
 		}
 
@@ -293,12 +319,15 @@ func (c *client) Subscribe(subj Subj, awaitData Serializable, handler Handler, o
 				zap.Error(err),
 				zap.Any("msg", msg),
 				zap.String("subj", string(subj)))
+
 			return
 		}
 
 		handler(msg, awaitData)
 	}
+
 	c.log.Debug("[Subscribe]", zap.String("subj", string(subj)))
+
 	return c.sc.Subscribe(string(subj), msgHandler, opt...)
 }
 
@@ -306,15 +335,19 @@ func (c *client) Subscribe(subj Subj, awaitData Serializable, handler Handler, o
 // If no option is specified, DefaultSubscriptionOptions are used. The default start
 // position is to receive new messages only (messages published after the subscription is
 // registered in the cluster).
-func (c *client) QueueSubscribe(subj Subj, qgroup QueueGroup, awaitData Serializable, handler Handler, opt ...SubscriptionOption) (Subscription, error) {
-	opt = append(opt, stan.SetManualAckMode()) // NB! stan.StartWithLastReceived()) - начинает с последнего уже доставленного! с виду кажется дубль
+// nolint lll
+func (c *client) QueueSubscribe(subj Subj, qG QueueGroup, awaitData Serializable, h Handler, opt ...SubscriptionOption) (Subscription, error) {
+	// NB! stan.StartWithLastReceived()) - начинает с последнего уже доставленного! с виду кажется дубль
+	opt = append(opt, stan.SetManualAckMode())
+
 	msgHandler := func(msg *Msg) {
 		if err := msg.Ack(); err != nil { // manual fast ack
 			c.log.Error("[QueueSubscribe] msg.Ack() problem",
 				zap.String("subj", string(subj)),
-				zap.String("qgroup", string(qgroup)),
+				zap.String("qgroup", string(qG)),
 				zap.Any("msg", msg),
 				zap.Error(err))
+
 			return
 		}
 
@@ -322,14 +355,14 @@ func (c *client) QueueSubscribe(subj Subj, qgroup QueueGroup, awaitData Serializ
 			c.log.Warn("[QueueSubscribe] Redelivered msg received",
 				zap.Any("msg", msg),
 				zap.String("subj", string(subj)),
-				zap.String("qgroup", string(qgroup)))
-			//return // TODO. THINK HERE. WHAT WE NEED TO DO?
-		}
+				zap.String("qgroup", string(qG)))
+		} // return // TODO. THINK HERE. WHAT WE NEED TO DO?
 
 		if msg == nil {
 			c.log.Warn("[QueueSubscribe] Msg is nil",
 				zap.String("subj", string(subj)),
-				zap.String("qgroup", string(qgroup)))
+				zap.String("qgroup", string(qG)))
+
 			return
 		}
 
@@ -338,25 +371,27 @@ func (c *client) QueueSubscribe(subj Subj, qgroup QueueGroup, awaitData Serializ
 		if err := awaitData.Unmarshal(msg.Data); err != nil {
 			c.log.Error("[QueueSubscribe] Unmarshal",
 				zap.String("subj", string(subj)),
-				zap.String("qgroup", string(qgroup)),
+				zap.String("qgroup", string(qG)),
 				zap.Any("msg", msg),
 				zap.Error(err))
+
 			return
 		}
 
-		handler(msg, awaitData)
+		h(msg, awaitData)
 	}
 
-	c.log.Debug("[QueueSubscribe]", zap.String("subj", string(subj)), zap.String("qgroup", string(qgroup)))
-	return c.sc.QueueSubscribe(string(subj), string(qgroup), msgHandler, opt...)
+	c.log.Debug("[QueueSubscribe]", zap.String("subj", string(subj)), zap.String("qgroup", string(qG)))
+
+	return c.sc.QueueSubscribe(string(subj), string(qG), msgHandler, opt...)
 }
 
-// Nats - return advance Nats client
+// Nats - return advance Nats client.
 func (c *client) Nats() nc.SimpleNatsClientI {
 	return c.nc
 }
 
-// NatsConn - return pure nats conn pointer
+// NatsConn - return pure nats conn pointer.
 func (c *client) NatsConn() *nats.Conn {
 	if c.nc == nil {
 		return nil
@@ -365,13 +400,15 @@ func (c *client) NatsConn() *nats.Conn {
 	return c.nc.NatsConn()
 }
 
-// Close - close Nats streaming connection and NB! Also Close pure Nats Connection
+// Close - close Nats streaming connection and NB! Also Close pure Nats Connection.
+// !Note that you will be responsible for closing the NATS Connection after the streaming connection has been closed.
 func (c *client) Close() error {
 	var err error
-	// Note that you will be responsible for closing the NATS Connection after the streaming connection has been closed.
+
 	defer func() {
 		if c.nc != nil {
 			err1 := c.nc.Close()
+
 			if err == nil {
 				err = err1
 			} else {
@@ -379,6 +416,11 @@ func (c *client) Close() error {
 			}
 		}
 	}()
+
 	err = c.sc.Close()
-	return err
+	if err != nil {
+		return errors.Wrap(err, "Close")
+	}
+
+	return nil
 }

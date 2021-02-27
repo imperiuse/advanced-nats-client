@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"go.uber.org/atomic"
-
 	"go.uber.org/zap"
 
 	"github.com/gofrs/uuid"
@@ -21,6 +20,8 @@ import (
 	"github.com/imperiuse/advance-nats-client/serializable/mock"
 	"github.com/imperiuse/advance-nats-client/streaming/mocks"
 )
+
+var testDSN = []URL{"nats://127.0.0.1:4223"}
 
 type NatsStreamingClientTestSuit struct {
 	suite.Suite
@@ -53,7 +54,7 @@ func (suite *NatsStreamingClientTestSuit) SetupSuite() {
 
 	badNatsClient := nc.NewDefaultClient()
 	c1, err := New(DefaultClusterID, fmt.Sprint(uuid.Must(uuid.NewV4())), badNatsClient)
-	assert.Equal(suite.T(), ErrEmptyNatsConn, err)
+	assert.Equal(suite.T(), ErrNilNatsConn, err)
 	assert.Nil(suite.T(), c1, "client must be nil!")
 
 	natsClient, err := nc.New(testDSN)
@@ -334,19 +335,19 @@ func (suite *NatsStreamingClientTestSuit) Test_CheckNilNatsClient() {
 	c := client{}
 
 	_, err := c.ReplyHandler("", &mock.DataMock{}, nil)
-	assert.Equal(suite.T(), ErrEmptyNatsClient, err)
+	assert.Equal(suite.T(), ErrNilNatsClient, err)
 
 	err = c.Request(context.Background(), "", &mock.DataMock{}, &mock.DataMock{})
-	assert.Equal(suite.T(), ErrEmptyNatsClient, err)
+	assert.Equal(suite.T(), ErrNilNatsClient, err)
 
 	_, err = c.PongHandler("")
-	assert.Equal(suite.T(), ErrEmptyNatsClient, err)
+	assert.Equal(suite.T(), ErrNilNatsClient, err)
 
 	_, err = c.Ping(context.Background(), "")
-	assert.Equal(suite.T(), ErrEmptyNatsClient, err)
+	assert.Equal(suite.T(), ErrNilNatsClient, err)
 
 	_, err = c.PongQueueHandler("", "")
-	assert.Equal(suite.T(), ErrEmptyNatsClient, err)
+	assert.Equal(suite.T(), ErrNilNatsClient, err)
 }
 
 func (suite *NatsStreamingClientTestSuit) Test_QueueSubscribe() {

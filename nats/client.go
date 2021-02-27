@@ -2,12 +2,11 @@ package nats
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"strings"
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/imperiuse/advance-nats-client/logger"
@@ -15,22 +14,26 @@ import (
 )
 
 const (
+	// MaxReconnectDefault -  max reconnect try cnt.
 	MaxReconnectDefault = 10
 
-	ReconnectWaitDefault      = 5 * time.Second
-	ReconnectJitterDefault    = time.Second * 1
+	// ReconnectWaitDefault - reconnect w8 timeout default value.
+	ReconnectWaitDefault = 5 * time.Second
+
+	// ReconnectJitterDefault -  reconnect w8 jitter timeout default value.
+	ReconnectJitterDefault = time.Second * 1
+
+	// ReconnectJitterTLSDefault -  reconnect w8 jitter TLS timeout default value.
 	ReconnectJitterTLSDefault = time.Second * 2
 )
 
-var (
-	ErrEmptyMsg = errors.New("empty msg. nats msg is nil")
-)
+// ErrEmptyMsg - empty msg. nats msg is nil.
+var ErrEmptyMsg = errors.New("empty msg. nats msg is nil")
 
-var (
-	DefaultDSN = []URL{nats.DefaultURL}
-	testDSN    = []URL{"nats://127.0.0.1:4223"}
-)
+// DefaultDSN - default nats url and port.
+var DefaultDSN = []URL{nats.DefaultURL}
 
+// SimpleNatsClientI _.
 type SimpleNatsClientI interface {
 	UseCustomLogger(logger.Logger)
 	Ping(context.Context, Subj) (bool, error)
@@ -43,6 +46,7 @@ type SimpleNatsClientI interface {
 	Close() error
 }
 
+//nolint golint
 //go:generate mockery --name=PureNatsConnI
 type (
 	PureNatsConnI interface {
@@ -56,7 +60,7 @@ type (
 	Subj       string
 	QueueGroup string
 
-	// client is Advance Nats client, or simple - wrapper for nats.Conn, so it's own nats client library for reduce code
+	// client is Advance Nats client, or simple - wrapper for nats.Conn, so it's own nats client library for reduce code.
 	client struct {
 		log  logger.Logger
 		dsn  []URL
@@ -73,7 +77,7 @@ type (
 	Subscription = nats.Subscription
 	Conn         = nats.Conn
 
-	//                pure NATS Msg, request   reply
+	// Handler       pure NATS Msg, request   reply.
 	Handler      = func(*Msg, Serializable) Serializable
 	Serializable = serializable.Serializable
 )
@@ -83,7 +87,8 @@ const (
 	pongMsg = "pong"
 )
 
-// New - main "constructor" function
+// New - main "constructor" function.
+// nolint golint
 func New(dsn []URL, options ...Option) (*client, error) {
 	c := NewDefaultClient().addDSN(dsn)
 
@@ -94,7 +99,7 @@ func New(dsn []URL, options ...Option) (*client, error) {
 
 	conn, err := createNatsConn(dsn, options...)
 	if err != nil {
-		return nil, fmt.Errorf("can't create nats conn. nats unavailbale? %w", err)
+		return nil, errors.Wrap(err, "can't create nats conn. nats unavailbale?")
 	}
 
 	c.conn = conn
@@ -111,12 +116,14 @@ func createNatsConn(dsn []URL, option ...Option) (*nats.Conn, error) {
 	if err != nil {
 		// Should not return an error even if it can't connect, but you still
 		// need to check in case there are some configuration errors.
-		return nil, err
+		return nil, errors.Wrap(err, "create nats.Connect")
 	}
 
 	return conn, nil
 }
 
+// NewDefaultClient empty default client.
+// nolint golint
 func NewDefaultClient() *client {
 	return &client{
 		dsn: DefaultDSN,
@@ -128,6 +135,7 @@ func (c *client) addDSN(dsn []URL) *client {
 	if len(dsn) != 0 {
 		c.dsn = dsn
 	}
+
 	return c
 }
 
@@ -151,29 +159,37 @@ func (c *client) defaultNatsOptions() []Option {
 	}
 }
 
-// UseCustomLogger - register your own logger instance of zap.Logger
+// UseCustomLogger - register your own logger instance of zap.Logger.
 func (c *client) UseCustomLogger(log logger.Logger) {
 	c.log = log
 }
 
 // Ping - send synchronous request with ctx deadline or timeout
-// e.g. ctx, _ := context.WithTimeout(context.Background(), time.Second)
+// e.g. ctx, _ := context.WithTimeout(context.Background(), time.Second).
 func (c *client) Ping(ctx context.Context, subj Subj) (bool, error) {
 	c.log.Debug("Ping", zap.String("subj", string(subj)))
+
 	msg, err := c.conn.RequestWithContext(ctx, string(subj), []byte(pingMsg))
+
 	if msg == nil {
-		return false, ErrEmptyMsg
+		return false, errors.Wrap(ErrEmptyMsg, "msg == nil")
 	}
 
-	return string(msg.Data) == pongMsg, err
+	if err != nil {
+		return false, errors.Wrap(err, "c.conn.RequestWithContext")
+	}
+
+	return string(msg.Data) == pongMsg, nil
 }
 
-// PongHandler - register simple pong handler (use to peer-to-peer topics)
+// PongHandler - register simple pong handler (use to peer-to-peer topics).
 func (c *client) PongHandler(subj Subj) (*Subscription, error) {
 	c.log.Debug("[PongHandler]", zap.String("subj", string(subj)))
+
 	return c.conn.Subscribe(string(subj), func(msg *Msg) {
 		if msg == nil {
 			c.log.Debug("Nil msg", zap.String("subj", string(subj)))
+
 			return
 		}
 		if string(msg.Data) == pingMsg {
@@ -182,9 +198,10 @@ func (c *client) PongHandler(subj Subj) (*Subscription, error) {
 	})
 }
 
-// PongQueueHandler - register pong handler with QueueGroup (use to 1 to Many)
+// PongQueueHandler - register pong handler with QueueGroup (use to 1 to Many).
 func (c *client) PongQueueHandler(subj Subj, queue QueueGroup) (*Subscription, error) {
 	c.log.Debug("[PongQueueHandler]", zap.String("subj", string(subj)), zap.String("queue", string(queue)))
+
 	return c.conn.QueueSubscribe(string(subj), string(queue), func(msg *Msg) {
 		if msg == nil {
 			return
@@ -195,32 +212,33 @@ func (c *client) PongQueueHandler(subj Subj, queue QueueGroup) (*Subscription, e
 	})
 }
 
-// Request - send synchronous msg to topic subj, and wait reply from another topic (e.g. Request-Reply Nats pattern)
+// Request - send synchronous msg to topic subj, and wait reply from another topic (e.g. Request-Reply Nats pattern).
 func (c *client) Request(ctx context.Context, subj Subj, request Serializable, reply Serializable) error {
 	c.log.Debug("[Request]", zap.String("subj", string(subj)), zap.Any("data", request))
 
 	byteData, err := request.Marshal()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "request.Marshal()")
 	}
 
 	msg, err := c.conn.RequestWithContext(ctx, string(subj), byteData)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "c.conn.RequestWithContext")
 	}
 
 	if msg == nil {
-		return ErrEmptyMsg
+		return errors.Wrap(ErrEmptyMsg, "Request")
 	}
 
 	return reply.Unmarshal(msg.Data)
 }
 
-// ReplyHandler - register for asynchronous msgHandler func for process Nats Msg
+// ReplyHandler - register for asynchronous msgHandler func for process Nats Msg.
 func (c *client) ReplyHandler(subj Subj, awaitData Serializable, msgHandler Handler) (*Subscription, error) {
 	return c.conn.Subscribe(string(subj), func(msg *nats.Msg) {
 		if msg == nil {
 			c.log.Warn("[ReplyHandler] Nil msg", zap.String("subj", string(subj)))
+
 			return
 		}
 
@@ -232,6 +250,7 @@ func (c *client) ReplyHandler(subj Subj, awaitData Serializable, msgHandler Hand
 				zap.Any("msg", msg),
 				zap.Error(err),
 			)
+
 			return
 		}
 
@@ -244,6 +263,7 @@ func (c *client) ReplyHandler(subj Subj, awaitData Serializable, msgHandler Hand
 				zap.Any("data", replyData),
 				zap.Error(err),
 			)
+
 			return
 		}
 
@@ -252,16 +272,18 @@ func (c *client) ReplyHandler(subj Subj, awaitData Serializable, msgHandler Hand
 				zap.String("subj", string(subj)),
 				zap.Error(err),
 			)
+
 			return
 		}
 	})
 }
 
-// ReplyQueueHandler - register queue for asynchronous msgHandler func for process Nats Msg
-func (c *client) ReplyQueueHandler(subj Subj, qGroup QueueGroup, awaitData Serializable, msgHandler Handler) (*Subscription, error) {
-	return c.conn.QueueSubscribe(string(subj), string(qGroup), func(msg *nats.Msg) {
+// ReplyQueueHandler - register queue for asynchronous msgHandler func for process Nats Msg.
+func (c *client) ReplyQueueHandler(subj Subj, qG QueueGroup, awaitData Serializable, h Handler) (*Subscription, error) {
+	return c.conn.QueueSubscribe(string(subj), string(qG), func(msg *nats.Msg) {
 		if msg == nil {
 			c.log.Warn("[ReplyQueueHandler] Nil msg", zap.String("subj", string(subj)))
+
 			return
 		}
 
@@ -270,45 +292,53 @@ func (c *client) ReplyQueueHandler(subj Subj, qGroup QueueGroup, awaitData Seria
 		if err := awaitData.Unmarshal(msg.Data); err != nil {
 			c.log.Error("[ReplyQueueHandler] Unmarshal",
 				zap.String("subj", string(subj)),
-				zap.String("qGroup", string(qGroup)),
+				zap.String("qGroup", string(qG)),
 				zap.Any("msg", msg),
 				zap.Error(err),
 			)
+
 			return
 		}
 
-		replyData := msgHandler(msg, awaitData)
+		replyData := h(msg, awaitData)
 
 		data, err := replyData.Marshal()
 		if err != nil {
 			c.log.Error("[ReplyQueueHandler] Marshall",
 				zap.String("subj", string(subj)),
-				zap.String("qGroup", string(qGroup)),
+				zap.String("qGroup", string(qG)),
 				zap.Any("data", replyData),
 				zap.Error(err),
 			)
+
 			return
 		}
 
 		if err = msg.Respond(data); err != nil {
 			c.log.Error("[ReplyQueueHandler] Respond",
 				zap.String("subj", string(subj)),
-				zap.String("qGroup", string(qGroup)),
+				zap.String("qGroup", string(qG)),
 				zap.Error(err),
 			)
+
 			return
 		}
 	})
 }
 
-// NatsConn - return pure Nats Conn (pointer to struct)
+// NatsConn - return pure Nats Conn (pointer to struct).
 func (c *client) NatsConn() *Conn {
 	return c.pureNC
 }
 
-// Close - Drain and Close workaround
+// Close - Drain and Close workaround.
 func (c *client) Close() error {
+	defer c.conn.Close()
+
 	err := c.conn.Drain()
-	c.conn.Close()
-	return err
+	if err != nil {
+		return errors.Wrap(err, "c.conn.Drain")
+	}
+
+	return nil
 }

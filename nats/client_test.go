@@ -19,6 +19,8 @@ import (
 	m "github.com/imperiuse/advance-nats-client/serializable/mock"
 )
 
+var testDSN = []URL{"nats://127.0.0.1:4223"}
+
 type NatsClientTestSuit struct {
 	suite.Suite
 	ctx           context.Context
