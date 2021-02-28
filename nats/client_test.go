@@ -313,7 +313,7 @@ func (suite *NatsClientTestSuit) Test_BadRequestReply() {
 			request := request
 			err := suite.natsClient.Request(ctx, subj, &request, reply)
 			assert.NotNil(suite.T(), err, "Must be err")
-			assert.Equal(suite.T(), m.ErrBadDataMock, err, "must be err errBadDataMock")
+			assert.Equal(suite.T(), m.ErrBadDataMock, errors.Cause(err), "must be err errBadDataMock")
 		}
 		done <- struct{}{}
 	}(sendChan, done)
@@ -331,7 +331,7 @@ func (suite *NatsClientTestSuit) Test_BadSubscribe() {
 	})
 	assert.Nil(suite.T(), s, "must be nil")
 	assert.NotNil(suite.T(), err, "must be err")
-	assert.Equal(suite.T(), errBad, err, "must be equals")
+	assert.Equal(suite.T(), errBad, errors.Cause(err), "must be equals")
 }
 
 func (suite *NatsClientTestSuit) Test_BadRequest1() {
@@ -339,11 +339,12 @@ func (suite *NatsClientTestSuit) Test_BadRequest1() {
 	ctx, cancelFunc := context.WithTimeout(context.Background(), timeoutNatsRequest)
 	defer cancelFunc()
 
-	errBad := errors.New("bad")
+	const errStrBad = "bad"
+	errBad := errors.New(errStrBad)
 	suite.mockNats.On("RequestWithContext", mock.Anything, mock.AnythingOfType("string"), mock.Anything).Return(&Msg{}, errBad)
 	err := suite.badNatsClient.Request(ctx, "testSubj", &m.DataMock{Data: []byte("mock data")}, &m.DataMock{})
 	assert.NotNil(suite.T(), err, "must be err")
-	assert.Equal(suite.T(), errBad, err, "must be equals")
+	assert.Equal(suite.T(), errBad, errors.Cause(err), "must be equals")
 
 	// it's hack, because you can't change hook with On() function =(
 	suite.mockNats = &mocks.PureNatsConnI{}
@@ -351,7 +352,7 @@ func (suite *NatsClientTestSuit) Test_BadRequest1() {
 	suite.mockNats.On("RequestWithContext", mock.Anything, mock.AnythingOfType("string"), mock.Anything).Return(nil, nil)
 	err = suite.badNatsClient.Request(ctx, "testSubj", &m.DataMock{Data: []byte("mock data")}, &m.DataMock{})
 	assert.NotNil(suite.T(), err, "must be err")
-	assert.Equal(suite.T(), ErrEmptyMsg, err, "must be equals")
+	assert.Equal(suite.T(), ErrEmptyMsg, errors.Cause(err), "must be equals")
 
 	// it's hack, because you can't change hook with On() function =(
 	suite.mockNats = &mocks.PureNatsConnI{}
@@ -359,5 +360,5 @@ func (suite *NatsClientTestSuit) Test_BadRequest1() {
 	suite.mockNats.On("RequestWithContext", mock.Anything, mock.AnythingOfType("string"), mock.Anything).Return(nil, errBad)
 	err = suite.badNatsClient.Request(ctx, "testSubj", &m.DataMock{Data: []byte("mock data")}, &m.DataMock{})
 	assert.NotNil(suite.T(), err, "must be err")
-	assert.Equal(suite.T(), errBad, err, "must be equals")
+	assert.Equal(suite.T(), errBad, errors.Cause(err), "must be equals")
 }

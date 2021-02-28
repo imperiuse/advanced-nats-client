@@ -54,7 +54,7 @@ func (suite *NatsStreamingClientTestSuit) SetupSuite() {
 
 	badNatsClient := nc.NewDefaultClient()
 	c1, err := New(DefaultClusterID, fmt.Sprint(uuid.Must(uuid.NewV4())), badNatsClient)
-	assert.Equal(suite.T(), ErrNilNatsConn, err)
+	assert.Equal(suite.T(), ErrNilNatsConn, errors.Cause(err))
 	assert.Nil(suite.T(), c1, "client must be nil!")
 
 	natsClient, err := nc.New(testDSN)
@@ -116,7 +116,7 @@ func (suite *NatsStreamingClientTestSuit) Test_PublishSync() {
 
 	err = suite.streamingClient.PublishSync("Test_PublishSync", &mock.BadDataMock{})
 	assert.NotNil(suite.T(), err, "PublishSync must return err")
-	assert.Equal(suite.T(), mock.ErrBadDataMock, err)
+	assert.Equal(suite.T(), mock.ErrBadDataMock, errors.Cause(err))
 }
 
 func (suite *NatsStreamingClientTestSuit) Test_PublishAsync() {
@@ -126,7 +126,7 @@ func (suite *NatsStreamingClientTestSuit) Test_PublishAsync() {
 
 	guid, err = suite.streamingClient.PublishAsync("Test_PublishAsync", &mock.BadDataMock{}, nil)
 	assert.NotNil(suite.T(), err, "PublishAsync must return err")
-	assert.Equal(suite.T(), mock.ErrBadDataMock, err)
+	assert.Equal(suite.T(), mock.ErrBadDataMock, errors.Cause(err))
 	assert.Equal(suite.T(), EmptyGUID, guid, "GUID must be empty")
 }
 
@@ -172,7 +172,7 @@ func (suite *NatsStreamingClientTestSuit) Test_BadPublish() {
 
 	err := suite.badStreamingClient.PublishSync("testSubj", &mock.DataMock{Data: []byte("test_data")})
 	assert.NotNil(suite.T(), err, "must be err")
-	assert.Equal(suite.T(), errBad, err, "must be equals")
+	assert.Equal(suite.T(), errBad, errors.Cause(err), "must be equals")
 
 	guid, err := suite.badStreamingClient.PublishAsync("testSubj", &mock.DataMock{Data: []byte("test_data")}, suite.badStreamingClient.DefaultAckHandler())
 	assert.NotNil(suite.T(), err, "must be err")
@@ -187,7 +187,7 @@ func (suite *NatsStreamingClientTestSuit) Test_BadSubscribe() {
 	s, err := suite.badStreamingClient.Subscribe("testSubj", &mock.DataMock{}, EmptyHandler)
 	assert.Nil(suite.T(), s, "must be nil")
 	assert.NotNil(suite.T(), err, "must be err")
-	assert.Equal(suite.T(), errBad, err, "must be equals")
+	assert.Equal(suite.T(), errBad, errors.Cause(err), "must be equals")
 }
 
 func (suite *NatsStreamingClientTestSuit) Test_PingPongDummyTest() {
@@ -335,19 +335,19 @@ func (suite *NatsStreamingClientTestSuit) Test_CheckNilNatsClient() {
 	c := client{}
 
 	_, err := c.ReplyHandler("", &mock.DataMock{}, nil)
-	assert.Equal(suite.T(), ErrNilNatsClient, err)
+	assert.Equal(suite.T(), ErrNilNatsClient, errors.Cause(err))
 
 	err = c.Request(context.Background(), "", &mock.DataMock{}, &mock.DataMock{})
-	assert.Equal(suite.T(), ErrNilNatsClient, err)
+	assert.Equal(suite.T(), ErrNilNatsClient, errors.Cause(err))
 
 	_, err = c.PongHandler("")
-	assert.Equal(suite.T(), ErrNilNatsClient, err)
+	assert.Equal(suite.T(), ErrNilNatsClient, errors.Cause(err))
 
 	_, err = c.Ping(context.Background(), "")
-	assert.Equal(suite.T(), ErrNilNatsClient, err)
+	assert.Equal(suite.T(), ErrNilNatsClient, errors.Cause(err))
 
 	_, err = c.PongQueueHandler("", "")
-	assert.Equal(suite.T(), ErrNilNatsClient, err)
+	assert.Equal(suite.T(), ErrNilNatsClient, errors.Cause(err))
 }
 
 func (suite *NatsStreamingClientTestSuit) Test_QueueSubscribe() {
@@ -456,5 +456,5 @@ func (suite *NatsStreamingClientTestSuit) Test_BadQueueSubscriber() {
 	s, err := suite.badStreamingClient.QueueSubscribe("testSubj", "testQ", &mock.DataMock{}, EmptyHandler)
 	assert.Nil(suite.T(), s, "must be nil")
 	assert.NotNil(suite.T(), err, "must be err")
-	assert.Equal(suite.T(), errBad, err, "must be equals")
+	assert.Equal(suite.T(), errBad, errors.Cause(err), "must be equals")
 }
