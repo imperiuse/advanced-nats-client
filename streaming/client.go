@@ -125,7 +125,7 @@ func New(clusterID string, clientID string, nc nc.SimpleNatsClientI, options ...
 func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...Option) (*client, error) {
 	c := newDefaultClient()
 	c.clusterID = clusterID
-	c.clusterID = clientID
+	c.clientID = clientID
 
 	// Default settings for internal NATS client
 	options = append(options, c.defaultNatsStreamingOptions()...)
@@ -165,7 +165,7 @@ func (c *client) defaultNatsStreamingOptions() []Option {
 			var err error
 			c.sc, err = stan.Connect(c.clusterID, c.clientID, stan.NatsConn(c.nc.NatsConn()))
 			if err != nil {
-				c.log.Error("", zap.Error(err))
+				c.log.Error("Can't create new stan connection", zap.Error(err))
 			} else {
 				c.log.Info("Successfully re-create stan connection!")
 			}
