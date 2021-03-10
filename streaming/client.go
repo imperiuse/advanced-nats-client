@@ -124,6 +124,8 @@ func New(clusterID string, clientID string, nc nc.SimpleNatsClientI, options ...
 // nolint golint
 func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...Option) (*client, error) {
 	c := newDefaultClient()
+	c.clusterID = clusterID
+	c.clusterID = clientID
 
 	// Default settings for internal NATS client
 	options = append(options, c.defaultNatsStreamingOptions()...)
