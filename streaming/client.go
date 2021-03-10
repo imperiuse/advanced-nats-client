@@ -124,9 +124,7 @@ func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...O
 	c := newDefaultClient()
 
 	// Default settings for internal NATS client
-	if len(options) == 0 {
-		options = c.defaultNatsStreamingOptions()
-	}
+	options = append(options, c.defaultNatsStreamingOptions()...)
 
 	// DSN for NATS connection, e.g. "nats://127.0.0.1:4222" stan.DefaultNatsURL
 	if dsn != nil {
