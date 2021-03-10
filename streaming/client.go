@@ -153,8 +153,10 @@ func (c *client) defaultNatsStreamingOptions() []Option {
 		stan.ConnectWait(stan.DefaultConnectWait),
 		stan.MaxPubAcksInflight(stan.DefaultMaxPubAcksInflight),
 		stan.PubAckWait(stan.DefaultAckWait),
-		stan.SetConnectionLostHandler(func(_ stan.Conn, reason error) {
+		stan.SetConnectionLostHandler(func(sc stan.Conn, reason error) {
 			c.log.Error("Connection lost, reason: %v", zap.Error(reason))
+			c.log.Info("Try use new stan conn")
+			c.sc = sc
 		}),
 	}
 }
