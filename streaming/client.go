@@ -158,16 +158,15 @@ func (c *client) defaultNatsStreamingOptions() []Option {
 		stan.MaxPubAcksInflight(stan.DefaultMaxPubAcksInflight),
 		stan.PubAckWait(stan.DefaultAckWait),
 		stan.SetConnectionLostHandler(func(sc stan.Conn, reason error) {
-			c.log.Error("Connection lost, reason: %v", zap.Error(reason))
-
-			c.log.Info("Try re-create stan conn")
+			c.log.Warn("[ConnectionLostHandler] Connection lost", zap.Error(reason))
+			c.log.Info("[ConnectionLostHandler] Try recreate stan conn")
 
 			var err error
 			c.sc, err = stan.Connect(c.clusterID, c.clientID, stan.NatsConn(c.nc.NatsConn()))
 			if err != nil {
-				c.log.Error("Can't create new stan connection", zap.Error(err))
+				c.log.Error("[ConnectionLostHandler] Can't create new stan connection", zap.Error(err))
 			} else {
-				c.log.Info("Successfully re-create stan connection!")
+				c.log.Info("[ConnectionLostHandler] Successfully recreate stan connection!")
 			}
 		}),
 	}
