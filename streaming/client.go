@@ -163,7 +163,7 @@ func (c *client) defaultNatsStreamingOptions() []Option {
 			c.log.Info("Try re-create stan conn")
 
 			var err error
-			c.sc, err = stan.Connect(c.clusterID, c.clientID, nil, stan.NatsConn(c.nc.NatsConn()))
+			c.sc, err = stan.Connect(c.clusterID, c.clientID, stan.NatsConn(c.nc.NatsConn()))
 			if err != nil {
 				c.log.Error("", zap.Error(err))
 			} else {
