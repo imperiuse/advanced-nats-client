@@ -40,9 +40,11 @@ type AdvanceNatsClient interface {
 //nolint golint
 type (
 	client struct {
-		log logger.Logger
-		sc  PureNatsStunConnI    // StunConnI equals stan.Conn
-		nc  nc.SimpleNatsClientI // Simple Nats client (from another package of this library =) )
+		clusterID string
+		clientID  string
+		log       logger.Logger
+		sc        PureNatsStunConnI    // StunConnI equals stan.Conn
+		nc        nc.SimpleNatsClientI // Simple Nats client (from another package of this library =) )
 	}
 
 	URL = string
@@ -155,8 +157,16 @@ func (c *client) defaultNatsStreamingOptions() []Option {
 		stan.PubAckWait(stan.DefaultAckWait),
 		stan.SetConnectionLostHandler(func(sc stan.Conn, reason error) {
 			c.log.Error("Connection lost, reason: %v", zap.Error(reason))
-			c.log.Info("Try use new stan conn")
-			c.sc = sc
+
+			c.log.Info("Try re-create stan conn")
+
+			var err error
+			c.sc, err = stan.Connect(c.clusterID, c.clientID, nil, stan.NatsConn(c.nc.NatsConn()))
+			if err != nil {
+				c.log.Error("", zap.Error(err))
+			} else {
+				c.log.Info("Successfully re-create stan connection!")
+			}
 		}),
 	}
 }
