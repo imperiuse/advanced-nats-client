@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/stan.go"
@@ -158,15 +159,20 @@ func (c *client) defaultNatsStreamingOptions() []Option {
 		stan.MaxPubAcksInflight(stan.DefaultMaxPubAcksInflight),
 		stan.PubAckWait(stan.DefaultAckWait),
 		stan.SetConnectionLostHandler(func(sc stan.Conn, reason error) {
-			c.log.Warn("[ConnectionLostHandler] Connection lost", zap.Error(reason))
-			c.log.Info("[ConnectionLostHandler] Try recreate stan conn")
-
 			var err error
-			c.sc, err = stan.Connect(c.clusterID, c.clientID, stan.NatsConn(c.nc.NatsConn()))
-			if err != nil {
+			c.log.Warn("[ConnectionLostHandler] Connection lost", zap.Error(reason))
+			for {
+				c.log.Info("[ConnectionLostHandler] Try recreate stan conn")
+
+				c.sc, err = stan.Connect(c.clusterID, c.clientID, stan.NatsConn(c.nc.NatsConn()))
+				if err == nil {
+					c.log.Info("[ConnectionLostHandler] Successfully recreate stan connection!")
+
+					break
+				}
+
 				c.log.Error("[ConnectionLostHandler] Can't create new stan connection", zap.Error(err))
-			} else {
-				c.log.Info("[ConnectionLostHandler] Successfully recreate stan connection!")
+				time.Sleep(time.Second)
 			}
 		}),
 	}
@@ -428,9 +434,11 @@ func (c *client) Close() error {
 		}
 	}()
 
-	err = c.sc.Close()
-	if err != nil {
-		return errors.Wrap(err, "Close")
+	if c.sc != nil {
+		err = c.sc.Close()
+		if err != nil {
+			return errors.Wrap(err, "Close stun conn")
+		}
 	}
 
 	return nil

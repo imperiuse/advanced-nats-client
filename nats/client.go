@@ -15,7 +15,7 @@ import (
 
 const (
 	// MaxReconnectDefault -  max reconnect try cnt.
-	MaxReconnectDefault = 10
+	MaxReconnectDefault = -1 // infinity
 
 	// ReconnectWaitDefault - reconnect w8 timeout default value.
 	ReconnectWaitDefault = 5 * time.Second
