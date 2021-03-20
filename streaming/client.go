@@ -43,9 +43,11 @@ type (
 	client struct {
 		clusterID string
 		clientID  string
-		log       logger.Logger
-		sc        PureNatsStunConnI    // StunConnI equals stan.Conn
-		nc        nc.SimpleNatsClientI // Simple Nats client (from another package of this library =) )
+		options   []Option
+
+		log logger.Logger
+		sc  PureNatsStunConnI    // StunConnI equals stan.Conn
+		nc  nc.SimpleNatsClientI // Simple Nats client (from another package of this library =) )
 	}
 
 	URL = string
@@ -136,7 +138,9 @@ func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...O
 		options = append(options, stan.NatsURL(strings.Join(dsn, ", ")))
 	}
 
-	sc, err := stan.Connect(clusterID, clientID, options...)
+	c.options = options
+
+	sc, err := stan.Connect(c.clusterID, c.clientID, c.options...)
 	if err != nil {
 		return nil, errors.Wrap(err, "[NewOnlyStreaming] can't crate nats-streaming conn")
 	}
@@ -153,6 +157,8 @@ func newDefaultClient() *client {
 }
 
 func (c *client) defaultNatsStreamingOptions() []Option {
+	const maxTry = 5
+
 	return []Option{
 		stan.Pings(stan.DefaultPingInterval, stan.DefaultPingMaxOut), // todo, maybe should increase, very hard
 		stan.ConnectWait(stan.DefaultConnectWait),
@@ -160,20 +166,21 @@ func (c *client) defaultNatsStreamingOptions() []Option {
 		stan.PubAckWait(stan.DefaultAckWait),
 		stan.SetConnectionLostHandler(func(sc stan.Conn, reason error) {
 			var err error
-			c.log.Warn("[ConnectionLostHandler] Connection lost", zap.Error(reason))
-			for {
-				c.log.Info("[ConnectionLostHandler] Try recreate stan conn")
+			c.log.Warn("[ConnectionLostHandler] Connection lost", zap.Any("stan.Conn", sc), zap.Error(reason))
+			for i := 0; i < maxTry; i++ {
+				c.log.Sugar().Info("[ConnectionLostHandler] Try recreate stan conn: %d", i)
 
-				c.sc, err = stan.Connect(c.clusterID, c.clientID, stan.NatsConn(c.nc.NatsConn()))
+				c.sc, err = stan.Connect(c.clusterID, c.clientID, c.options...)
 				if err == nil {
 					c.log.Info("[ConnectionLostHandler] Successfully recreate stan connection!")
 
 					break
 				}
-
 				c.log.Error("[ConnectionLostHandler] Can't create new stan connection", zap.Error(err))
 				time.Sleep(time.Second)
 			}
+
+			c.log.Error("[ConnectionLostHandler] Can't create new stan connection. Finished try!")
 		}),
 	}
 }
