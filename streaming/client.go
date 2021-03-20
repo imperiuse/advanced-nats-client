@@ -157,7 +157,10 @@ func newDefaultClient() *client {
 }
 
 func (c *client) defaultNatsStreamingOptions() []Option {
-	const maxTry = 5
+	const (
+		maxTry          = 5
+		recreateTimeout = time.Second
+	)
 
 	return []Option{
 		stan.Pings(stan.DefaultPingInterval, stan.DefaultPingMaxOut), // todo, maybe should increase, very hard
@@ -168,16 +171,16 @@ func (c *client) defaultNatsStreamingOptions() []Option {
 			var err error
 			c.log.Warn("[ConnectionLostHandler] Connection lost", zap.Any("stan.Conn", sc), zap.Error(reason))
 			for i := 0; i < maxTry; i++ {
-				c.log.Sugar().Info("[ConnectionLostHandler] Try recreate stan conn: %d", i)
+				c.log.Sugar().Infof("[ConnectionLostHandler] Try recreate stan conn: %d", i)
 
 				c.sc, err = stan.Connect(c.clusterID, c.clientID, c.options...)
 				if err == nil {
 					c.log.Info("[ConnectionLostHandler] Successfully recreate stan connection!")
 
-					break
+					return
 				}
 				c.log.Error("[ConnectionLostHandler] Can't create new stan connection", zap.Error(err))
-				time.Sleep(time.Second)
+				time.Sleep(recreateTimeout)
 			}
 
 			c.log.Error("[ConnectionLostHandler] Can't create new stan connection. Finished try!")
