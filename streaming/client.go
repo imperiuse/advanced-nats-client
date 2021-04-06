@@ -6,14 +6,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/imperiuse/advance-nats-client/logger"
+	nc "github.com/imperiuse/advance-nats-client/nats"
+	"github.com/imperiuse/advance-nats-client/serializable"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/stan.go"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/imperiuse/advance-nats-client/logger"
-	nc "github.com/imperiuse/advance-nats-client/nats"
-	"github.com/imperiuse/advance-nats-client/serializable"
 )
 
 // nolint golint
@@ -130,8 +129,10 @@ func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...O
 	c.clusterID = clusterID
 	c.clientID = clientID
 
-	// Default settings for internal NATS client
-	options = append(options, c.defaultNatsStreamingOptions()...)
+	if options == nil {
+		// Default settings for internal NATS client
+		options = c.defaultNatsStreamingOptions()
+	}
 
 	// DSN for NATS connection, e.g. "nats://127.0.0.1:4222" stan.DefaultNatsURL
 	if dsn != nil {
@@ -169,7 +170,9 @@ func (c *client) defaultNatsStreamingOptions() []Option {
 		stan.PubAckWait(stan.DefaultAckWait),
 		stan.SetConnectionLostHandler(func(sc stan.Conn, reason error) {
 			var err error
+
 			c.log.Warn("[ConnectionLostHandler] Connection lost", zap.Any("stan.Conn", sc), zap.Error(reason))
+
 			for i := 0; i < maxTry; i++ {
 				c.log.Sugar().Infof("[ConnectionLostHandler] Try recreate stan conn: %d", i)
 
@@ -179,7 +182,9 @@ func (c *client) defaultNatsStreamingOptions() []Option {
 
 					return
 				}
+
 				c.log.Error("[ConnectionLostHandler] Can't create new stan connection", zap.Error(err))
+
 				time.Sleep(recreateTimeout)
 			}
 
