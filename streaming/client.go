@@ -151,6 +151,10 @@ func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...O
 	return c, nil
 }
 
+func (c *client) SetNS(sc PureNatsStunConnI) {
+	c.sc = sc
+}
+
 // NewDefaultClient - NewDefaultClient.
 func NewDefaultClient() *client {
 	return &client{
