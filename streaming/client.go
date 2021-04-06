@@ -16,7 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// nolint golint
+// AdvanceNatsClient - advance nats / nats streaming client.
 type AdvanceNatsClient interface {
 	// NATS @see -> nc.SimpleNatsClientI
 	Ping(context.Context, nc.Subj) (bool, error)
@@ -25,20 +25,22 @@ type AdvanceNatsClient interface {
 	Request(context.Context, Subj, Serializable, Serializable) error
 	ReplyHandler(Subj, Serializable, nc.Handler) (*nc.Subscription, error)
 	ReplyQueueHandler(Subj, QueueGroup, Serializable, nc.Handler) (*nc.Subscription, error)
+
 	// NATS Streaming
 	PublishSync(Subj, Serializable) error
 	PublishAsync(Subj, Serializable, AckHandler) (GUID, error)
 	DefaultAckHandler() AckHandler
 	Subscribe(Subj, Serializable, Handler, ...SubscriptionOption) (Subscription, error)
 	QueueSubscribe(Subj, QueueGroup, Serializable, Handler, ...SubscriptionOption) (Subscription, error)
+
 	// General for both NATS and NATS Streaming
 	UseCustomLogger(logger.Logger)
 	NatsConn() *nats.Conn
 	Nats() nc.SimpleNatsClientI
+	Reconnect() error // for nats streaming only
 	Close() error
 }
 
-//nolint golint
 type (
 	client struct {
 		clusterID string
@@ -48,12 +50,14 @@ type (
 		log logger.Logger
 		nc  nc.SimpleNatsClientI // Simple Nats client (from another package of this library =) )
 
-		sync.RWMutex                   // TODO везде добавить RW Mutex Lock/Unlock
-		sc           PureNatsStunConnI // StunConnI equals stan.Conn
+		sync.RWMutex
+		sc PureNatsStunConnI // StunConnI equals stan.Conn
 	}
 
+	// URL - url.
 	URL = string
 
+	// Option - option.
 	Option = stan.Option
 )
 
@@ -128,13 +132,13 @@ func New(clusterID string, clientID string, nc nc.SimpleNatsClientI, options ...
 // NewOnlyStreaming - create only streaming client.
 // nolint golint
 func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...Option) (*client, error) {
-	c := NewDefaultClient()
+	c := newDefaultClient()
 	c.clusterID = clusterID
 	c.clientID = clientID
 
 	if options == nil {
 		// Default settings for internal NATS client
-		options = c.defaultNatsStreamingOptions()
+		options = c.DefaultNatsStreamingOptions()
 	}
 
 	// DSN for NATS connection, e.g. "nats://127.0.0.1:4222" stan.DefaultNatsURL
@@ -149,30 +153,25 @@ func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...O
 		return nil, errors.Wrap(err, "[NewOnlyStreaming] can't create nats-streaming conn")
 	}
 
+	c.Lock()
+	defer c.Unlock()
+
 	c.sc = sc
 
 	return c, nil
 }
 
-func (c *client) SetNS(sc PureNatsStunConnI) {
-	c.Lock()
-	defer c.Unlock()
-
-	c.sc = sc
-}
-
-// NewDefaultClient - NewDefaultClient.
-func NewDefaultClient() *client {
+func newDefaultClient() *client {
 	return &client{
 		log:     logger.Log,
 		RWMutex: sync.RWMutex{},
 	}
 }
 
-func (c *client) defaultNatsStreamingOptions() []Option {
+func (c *client) DefaultNatsStreamingOptions() []Option {
 	const (
-		maxTry          = 5
-		recreateTimeout = time.Second
+		maxTry           = 5
+		timeoutReconnect = time.Second
 	)
 
 	return []Option{
@@ -181,26 +180,55 @@ func (c *client) defaultNatsStreamingOptions() []Option {
 		stan.MaxPubAcksInflight(stan.DefaultMaxPubAcksInflight),
 		stan.PubAckWait(stan.DefaultAckWait),
 		stan.SetConnectionLostHandler(func(sc stan.Conn, reason error) {
-			var err error
-
-			c.log.Warn("[ConnectionLostHandler] Connection lost", zap.Any("stan.Conn", sc), zap.Error(reason))
-
 			for i := 0; i < maxTry; i++ {
 				c.log.Sugar().Infof("[ConnectionLostHandler] Try recreate stan conn: %d", i)
 
-				c.sc, err = stan.Connect(c.clusterID, c.clientID, c.options...)
-				if err == nil {
-					c.log.Info("[ConnectionLostHandler] Successfully recreate stan connection!")
+				if err := c.Reconnect(); err == nil {
+					c.log.Sugar().Infof("[ConnectionLostHandler] Reconnect successfully: %d", i)
 
 					return
 				}
 
-				c.log.Error("[ConnectionLostHandler] Can't create new stan connection", zap.Error(err))
+				c.log.Sugar().Warn("[ConnectionLostHandler] Reconnect failed: %d", i)
 
-				time.Sleep(recreateTimeout)
+				time.Sleep(timeoutReconnect)
 			}
 
-			c.log.Error("[ConnectionLostHandler] Can't create new stan connection. Finished try!")
+			c.log.Warn("[ConnectionLostHandler] Reconnect attempts finished.... :")
+		}),
+	}
+}
+
+// DefaultNatsStreamingOptionWithQueueSubs - options with callback for nats streaming subs re-sub queues.
+func (c *client) DefaultNatsStreamingOptionWithQueueSubs(reSubFunc func(anc AdvanceNatsClient)) []stan.Option {
+	const (
+		maxTry           = 5
+		timeoutReconnect = time.Second
+	)
+
+	return []stan.Option{
+		stan.Pings(stan.DefaultPingInterval, stan.DefaultPingMaxOut), // todo, maybe should increase, very hard
+		stan.ConnectWait(stan.DefaultConnectWait),
+		stan.MaxPubAcksInflight(stan.DefaultMaxPubAcksInflight),
+		stan.PubAckWait(stan.DefaultAckWait),
+		stan.SetConnectionLostHandler(func(sc stan.Conn, reason error) {
+			for i := 0; i < maxTry; i++ {
+				c.log.Sugar().Infof("[ConnectionLostHandler] Try recreate stan conn: %d", i)
+
+				if err := c.Reconnect(); err == nil {
+					reSubFunc(c)
+
+					c.log.Sugar().Infof("[ConnectionLostHandler] Reconnect successfully: %d", i)
+
+					return
+				}
+
+				c.log.Sugar().Warn("[ConnectionLostHandler] Reconnect faild: %d", i)
+
+				time.Sleep(timeoutReconnect)
+			}
+
+			c.log.Warn("[ConnectionLostHandler] Reconnect attempts finished.... :")
 		}),
 	}
 }
@@ -284,7 +312,15 @@ func (c *client) PublishSync(subj Subj, data Serializable) error {
 		return errors.Wrap(err, "[PublishSync]")
 	}
 
-	return c.sc.Publish(string(subj), b)
+	c.RLock()
+	err = c.sc.Publish(string(subj), b)
+	c.Unlock()
+
+	if errors.Is(err, stan.ErrConnectionClosed) {
+		return c.Reconnect()
+	}
+
+	return err
 }
 
 // PublishAsync will publish to the cluster and asynchronously process
@@ -312,14 +348,13 @@ func (c *client) PublishAsync(subj Subj, data Serializable, ah AckHandler) (GUID
 		ah = c.DefaultAckHandler()
 	}
 
+	c.RLock()
 	guid, err := c.sc.PublishAsync(string(subj), b, ah)
-	if errors.Is(err, stan.ErrConnectionClosed) {
-		sc, err := stan.Connect(c.clusterID, c.clientID, c.options...)
-		if err != nil {
-			err = errors.Wrap(err, "[PublishAsync] can't create nats-streaming conn")
-		}
+	c.Unlock()
 
-		c.SetNS(sc)
+	if errors.Is(err, stan.ErrConnectionClosed) {
+		if err = c.Reconnect(); err != nil {
+		}
 	}
 
 	return guid, err
@@ -382,6 +417,8 @@ func (c *client) Subscribe(subj Subj, awaitData Serializable, handler Handler, o
 
 	c.log.Debug("[Subscribe]", zap.String("subj", string(subj)))
 
+	c.RLock()
+	defer c.Unlock()
 	return c.sc.Subscribe(string(subj), msgHandler, opt...)
 }
 
@@ -437,6 +474,8 @@ func (c *client) QueueSubscribe(subj Subj, qG QueueGroup, awaitData Serializable
 
 	c.log.Debug("[QueueSubscribe]", zap.String("subj", string(subj)), zap.String("qgroup", string(qG)))
 
+	c.RLock()
+	defer c.Unlock()
 	return c.sc.QueueSubscribe(string(subj), string(qG), msgHandler, opt...)
 }
 
@@ -452,6 +491,20 @@ func (c *client) NatsConn() *nats.Conn {
 	}
 
 	return c.nc.NatsConn()
+}
+
+func (c *client) Reconnect() error {
+	sc, err := stan.Connect(c.clusterID, c.clientID, c.options...)
+	if err != nil {
+		return errors.Wrap(err, "[Reconnect] can't create nats streaming connection. stan.Connect - error")
+	}
+
+	c.Lock()
+	defer c.Unlock()
+
+	c.sc = sc
+
+	return nil
 }
 
 // Close - close Nats streaming connection and NB! Also Close pure Nats Connection.
@@ -471,8 +524,12 @@ func (c *client) Close() error {
 		}
 	}()
 
+	c.RLock()
+	defer c.RUnlock()
+
 	if c.sc != nil {
 		err = c.sc.Close()
+
 		if err != nil {
 			return errors.Wrap(err, "Close stun conn")
 		}

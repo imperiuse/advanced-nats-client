@@ -492,9 +492,8 @@ linters:
     - tparallel
     - unconvert
     - whitespace
-    #    - nolintlint  // we used nolint when it's really needed
-    - wrapcheck
-    - wsl
+#    - nolintlint  // we used nolint when it's really needed
+#    - wrapcheck
   presets:
     - bugs
     - complexity

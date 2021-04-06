@@ -5,12 +5,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/imperiuse/advance-nats-client/logger"
+	"github.com/imperiuse/advance-nats-client/serializable"
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/imperiuse/advance-nats-client/logger"
-	"github.com/imperiuse/advance-nats-client/serializable"
 )
 
 const (
@@ -33,7 +32,7 @@ var ErrEmptyMsg = errors.New("empty msg. nats msg is nil")
 // DefaultDSN - default nats url and port.
 var DefaultDSN = []URL{nats.DefaultURL}
 
-// SimpleNatsClientI _.
+// SimpleNatsClientI _ .
 type SimpleNatsClientI interface {
 	UseCustomLogger(logger.Logger)
 	Ping(context.Context, Subj) (bool, error)
@@ -46,9 +45,9 @@ type SimpleNatsClientI interface {
 	Close() error
 }
 
-//nolint golint
 //go:generate mockery --name=PureNatsConnI
 type (
+	// PureNatsConnI - pure nats conn interface.
 	PureNatsConnI interface {
 		RequestWithContext(ctx context.Context, subj string, data []byte) (*Msg, error)
 		Subscribe(subj string, msgHandler MsgHandler) (*Subscription, error)
@@ -57,10 +56,12 @@ type (
 		Close()
 	}
 
-	Subj       string
+	// Subj - topic name.
+	Subj string
+	// QueueGroup - queue group name.
 	QueueGroup string
 
-	// client is Advance Nats client, or simple - wrapper for nats.Conn, so it's own nats client library for reduce code.
+	// client - wrapper for pure nats.Conn, so it's own nats client library for reduce code.
 	client struct {
 		log  logger.Logger
 		dsn  []URL
@@ -69,16 +70,23 @@ type (
 		pureNC *Conn // pure nats connection, for some special stuff, doesn't matter in all
 	}
 
+	// URL - url name.
 	URL = string // dsn url like this -> "nats://127.0.0.1:4222"
 
-	Option       = nats.Option
-	MsgHandler   = nats.MsgHandler
-	Msg          = nats.Msg
+	// Option - nats.Msg.
+	Option = nats.Option
+	// MsgHandler - nats.MsgHandler.
+	MsgHandler = nats.MsgHandler
+	// Msg - nats.Msg.
+	Msg = nats.Msg
+	// Subscription - nats.Subscription.
 	Subscription = nats.Subscription
-	Conn         = nats.Conn
+	// Conn - nats.Conn struct.
+	Conn = nats.Conn
 
-	// Handler       pure NATS Msg, request   reply.
-	Handler      = func(*Msg, Serializable) Serializable
+	// Handler - pure NATS Msg, request   reply.
+	Handler = func(*Msg, Serializable) Serializable
+	// Serializable - serializable.
 	Serializable = serializable.Serializable
 )
 
@@ -335,8 +343,7 @@ func (c *client) NatsConn() *Conn {
 func (c *client) Close() error {
 	defer c.conn.Close()
 
-	err := c.conn.Drain()
-	if err != nil {
+	if err := c.conn.Drain(); err != nil {
 		return errors.Wrap(err, "c.conn.Drain")
 	}
 
