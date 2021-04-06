@@ -10,6 +10,7 @@ import (
 	"github.com/imperiuse/advance-nats-client/logger"
 	nc "github.com/imperiuse/advance-nats-client/nats"
 	"github.com/imperiuse/advance-nats-client/serializable"
+	"github.com/imperiuse/advance-nats-client/uuid"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/stan.go"
 	"github.com/pkg/errors"
@@ -110,7 +111,7 @@ var (
 
 // New - Create Nats Streaming client with instance of Advance Nats client.
 //nolint golint
-func New(clusterID string, clientID string, nc nc.SimpleNatsClientI, options ...Option) (*client, error) {
+func New(clusterID string, nc nc.SimpleNatsClientI, options ...Option) (*client, error) {
 	if nc != nil {
 		if nc.NatsConn() == nil {
 			return nil, errors.Wrap(ErrNilNatsConn, "[New]")
@@ -119,7 +120,7 @@ func New(clusterID string, clientID string, nc nc.SimpleNatsClientI, options ...
 		options = append(options, stan.NatsConn(nc.NatsConn()))
 	}
 
-	c, err := NewOnlyStreaming(clusterID, clientID, nil, options...)
+	c, err := NewOnlyStreaming(clusterID, nil, options...)
 	if err != nil || c == nil {
 		return nil, errors.Wrap(err, "[New] NewOnlyStreaming")
 	}
@@ -131,10 +132,10 @@ func New(clusterID string, clientID string, nc nc.SimpleNatsClientI, options ...
 
 // NewOnlyStreaming - create only streaming client.
 // nolint golint
-func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...Option) (*client, error) {
+func NewOnlyStreaming(clusterID string, dsn []URL, options ...Option) (*client, error) {
 	c := NewDefaultClient()
 	c.clusterID = clusterID
-	c.clientID = clientID
+	c.clientID = uuid.UUID4()
 
 	if options == nil {
 		// Default settings for internal NATS client
@@ -185,13 +186,14 @@ func (c *client) DefaultNatsStreamingOptions() []Option {
 			for i := 0; i < maxTry; i++ {
 				c.log.Sugar().Infof("[ConnectionLostHandler] Try recreate stan conn: %d", i)
 
-				if err := c.Reconnect(); err == nil {
+				err := c.Reconnect()
+				if err == nil {
 					c.log.Sugar().Infof("[ConnectionLostHandler] Reconnect successfully: %d", i)
 
 					return
 				}
 
-				c.log.Sugar().Warn("[ConnectionLostHandler] Reconnect failed: %d", i)
+				c.log.Sugar().Warn("[ConnectionLostHandler] Reconnect %d failed: %v", i, err)
 
 				time.Sleep(timeoutReconnect)
 			}
@@ -217,15 +219,14 @@ func (c *client) DefaultNatsStreamingOptionWithQueueSubs(reSubFunc func(anc Adva
 			for i := 0; i < maxTry; i++ {
 				c.log.Sugar().Infof("[ConnectionLostHandler] Try recreate stan conn: %d", i)
 
-				if err := c.Reconnect(); err == nil {
-					reSubFunc(c)
-
+				err := c.Reconnect()
+				if err == nil {
 					c.log.Sugar().Infof("[ConnectionLostHandler] Reconnect successfully: %d", i)
 
 					return
 				}
 
-				c.log.Sugar().Warn("[ConnectionLostHandler] Reconnect faild: %d", i)
+				c.log.Sugar().Warn("[ConnectionLostHandler] Reconnect %d failed: %v", i, err)
 
 				time.Sleep(timeoutReconnect)
 			}
@@ -496,13 +497,14 @@ func (c *client) NatsConn() *nats.Conn {
 }
 
 func (c *client) Reconnect() error {
+	c.m.Lock()
+	defer c.m.Unlock()
+
+	c.clientID = uuid.UUID4()
 	sc, err := stan.Connect(c.clusterID, c.clientID, c.options...)
 	if err != nil {
 		return errors.Wrap(err, "[Reconnect] can't create nats streaming connection. stan.Connect - error")
 	}
-
-	c.m.Lock()
-	defer c.m.Unlock()
 
 	c.sc = sc
 
