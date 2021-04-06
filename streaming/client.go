@@ -38,8 +38,8 @@ type AdvanceNatsClient interface {
 	UseCustomLogger(logger.Logger)
 	NatsConn() *nats.Conn
 	Nats() nc.SimpleNatsClientI
-	Reconnect() error                                  // for nats streaming only
-	RegisterAfterReconnectFuncs(...AfterReconnectFunc) // for nats streaming only
+	Reconnect() error                              // for nats streaming only
+	RegisterAfterReconnectFunc(AfterReconnectFunc) // for nats streaming only
 	Close() error
 }
 
@@ -486,11 +486,11 @@ func (c *client) Reconnect() error {
 	return nil
 }
 
-func (c *client) RegisterAfterReconnectFuncs(arf ...AfterReconnectFunc) {
+func (c *client) RegisterAfterReconnectFunc(f AfterReconnectFunc) {
 	c.m.Lock()
 	defer c.m.Unlock()
 
-	c.arf = arf
+	c.arf = append(c.arf, f)
 }
 
 // Close - close Nats streaming connection and NB! Also Close pure Nats Connection.
