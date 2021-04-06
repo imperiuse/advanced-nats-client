@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/imperiuse/advance-nats-client/logger"
@@ -45,8 +46,10 @@ type (
 		options   []Option
 
 		log logger.Logger
-		sc  PureNatsStunConnI    // StunConnI equals stan.Conn
 		nc  nc.SimpleNatsClientI // Simple Nats client (from another package of this library =) )
+
+		sync.RWMutex                   // TODO везде добавить RW Mutex Lock/Unlock
+		sc           PureNatsStunConnI // StunConnI equals stan.Conn
 	}
 
 	URL = string
@@ -143,7 +146,7 @@ func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...O
 
 	sc, err := stan.Connect(c.clusterID, c.clientID, c.options...)
 	if err != nil {
-		return nil, errors.Wrap(err, "[NewOnlyStreaming] can't crate nats-streaming conn")
+		return nil, errors.Wrap(err, "[NewOnlyStreaming] can't create nats-streaming conn")
 	}
 
 	c.sc = sc
@@ -152,13 +155,17 @@ func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...O
 }
 
 func (c *client) SetNS(sc PureNatsStunConnI) {
+	c.Lock()
+	defer c.Unlock()
+
 	c.sc = sc
 }
 
 // NewDefaultClient - NewDefaultClient.
 func NewDefaultClient() *client {
 	return &client{
-		log: logger.Log,
+		log:     logger.Log,
+		RWMutex: sync.RWMutex{},
 	}
 }
 
@@ -305,7 +312,17 @@ func (c *client) PublishAsync(subj Subj, data Serializable, ah AckHandler) (GUID
 		ah = c.DefaultAckHandler()
 	}
 
-	return c.sc.PublishAsync(string(subj), b, ah)
+	guid, err := c.sc.PublishAsync(string(subj), b, ah)
+	if errors.Is(err, stan.ErrConnectionClosed) {
+		sc, err := stan.Connect(c.clusterID, c.clientID, c.options...)
+		if err != nil {
+			err = errors.Wrap(err, "[PublishAsync] can't create nats-streaming conn")
+		}
+
+		c.SetNS(sc)
+	}
+
+	return guid, err
 }
 
 // DefaultAckHandler - return default ack func with logging problem's, !please better use own ack handler func!
