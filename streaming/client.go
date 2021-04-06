@@ -50,7 +50,7 @@ type (
 		log logger.Logger
 		nc  nc.SimpleNatsClientI // Simple Nats client (from another package of this library =) )
 
-		sync.RWMutex
+		m  sync.RWMutex
 		sc PureNatsStunConnI // StunConnI equals stan.Conn
 	}
 
@@ -153,8 +153,8 @@ func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...O
 		return nil, errors.Wrap(err, "[NewOnlyStreaming] can't create nats-streaming conn")
 	}
 
-	c.Lock()
-	defer c.Unlock()
+	c.m.Lock()
+	defer c.m.Unlock()
 
 	c.sc = sc
 
@@ -165,8 +165,8 @@ func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...O
 //nolint
 func NewDefaultClient() *client {
 	return &client{
-		log:     logger.Log,
-		RWMutex: sync.RWMutex{},
+		log: logger.Log,
+		m:   sync.RWMutex{},
 	}
 }
 
@@ -314,9 +314,9 @@ func (c *client) PublishSync(subj Subj, data Serializable) error {
 		return errors.Wrap(err, "[PublishSync]")
 	}
 
-	c.RLock()
+	c.m.RLock()
 	err = c.sc.Publish(string(subj), b)
-	c.Unlock()
+	c.m.RUnlock()
 
 	if errors.Is(err, stan.ErrConnectionClosed) {
 		return c.Reconnect()
@@ -350,9 +350,9 @@ func (c *client) PublishAsync(subj Subj, data Serializable, ah AckHandler) (GUID
 		ah = c.DefaultAckHandler()
 	}
 
-	c.RLock()
+	c.m.RLock()
 	guid, err := c.sc.PublishAsync(string(subj), b, ah)
-	c.Unlock()
+	c.m.RUnlock()
 
 	if errors.Is(err, stan.ErrConnectionClosed) {
 		if err = c.Reconnect(); err != nil {
@@ -419,8 +419,8 @@ func (c *client) Subscribe(subj Subj, awaitData Serializable, handler Handler, o
 
 	c.log.Debug("[Subscribe]", zap.String("subj", string(subj)))
 
-	c.RLock()
-	defer c.Unlock()
+	c.m.RLock()
+	defer c.m.RUnlock()
 	return c.sc.Subscribe(string(subj), msgHandler, opt...)
 }
 
@@ -476,8 +476,8 @@ func (c *client) QueueSubscribe(subj Subj, qG QueueGroup, awaitData Serializable
 
 	c.log.Debug("[QueueSubscribe]", zap.String("subj", string(subj)), zap.String("qgroup", string(qG)))
 
-	c.RLock()
-	defer c.Unlock()
+	c.m.RLock()
+	defer c.m.RUnlock()
 	return c.sc.QueueSubscribe(string(subj), string(qG), msgHandler, opt...)
 }
 
@@ -501,8 +501,8 @@ func (c *client) Reconnect() error {
 		return errors.Wrap(err, "[Reconnect] can't create nats streaming connection. stan.Connect - error")
 	}
 
-	c.Lock()
-	defer c.Unlock()
+	c.m.Lock()
+	defer c.m.Unlock()
 
 	c.sc = sc
 
@@ -526,8 +526,8 @@ func (c *client) Close() error {
 		}
 	}()
 
-	c.RLock()
-	defer c.RUnlock()
+	c.m.RLock()
+	defer c.m.RUnlock()
 
 	if c.sc != nil {
 		err = c.sc.Close()
