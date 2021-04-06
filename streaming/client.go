@@ -51,8 +51,9 @@ type (
 		log logger.Logger
 		nc  nc.SimpleNatsClientI // Simple Nats client (from another package of this library =) )
 
-		m  sync.RWMutex
-		sc PureNatsStunConnI // StunConnI equals stan.Conn
+		m   sync.RWMutex
+		sc  PureNatsStunConnI // StunConnI equals stan.Conn
+		arf []AfterReconnectFunc
 	}
 
 	// URL - url.
@@ -90,6 +91,8 @@ type (
 	GUID = string // id send msg from Nats Streaming
 
 	Serializable = serializable.Serializable
+
+	AfterReconnectFunc = func(anc AdvanceNatsClient)
 )
 
 // EmptyGUID  "".
@@ -178,39 +181,6 @@ func (c *client) DefaultNatsStreamingOptions() []Option {
 	)
 
 	return []Option{
-		stan.Pings(stan.DefaultPingInterval, stan.DefaultPingMaxOut), // todo, maybe should increase, very hard
-		stan.ConnectWait(stan.DefaultConnectWait),
-		stan.MaxPubAcksInflight(stan.DefaultMaxPubAcksInflight),
-		stan.PubAckWait(stan.DefaultAckWait),
-		stan.SetConnectionLostHandler(func(sc stan.Conn, reason error) {
-			for i := 0; i < maxTry; i++ {
-				c.log.Sugar().Infof("[ConnectionLostHandler] Try recreate stan conn: %d", i)
-
-				err := c.Reconnect()
-				if err == nil {
-					c.log.Sugar().Infof("[ConnectionLostHandler] Reconnect successfully: %d", i)
-
-					return
-				}
-
-				c.log.Sugar().Warn("[ConnectionLostHandler] Reconnect %d failed: %v", i, err)
-
-				time.Sleep(timeoutReconnect)
-			}
-
-			c.log.Warn("[ConnectionLostHandler] Reconnect attempts finished.... :")
-		}),
-	}
-}
-
-// DefaultNatsStreamingOptionWithQueueSubs - options with callback for nats streaming subs re-sub queues.
-func (c *client) DefaultNatsStreamingOptionWithQueueSubs(reSubFunc func(anc AdvanceNatsClient)) []stan.Option {
-	const (
-		maxTry           = 5
-		timeoutReconnect = time.Second
-	)
-
-	return []stan.Option{
 		stan.Pings(stan.DefaultPingInterval, stan.DefaultPingMaxOut), // todo, maybe should increase, very hard
 		stan.ConnectWait(stan.DefaultConnectWait),
 		stan.MaxPubAcksInflight(stan.DefaultMaxPubAcksInflight),
@@ -508,7 +478,18 @@ func (c *client) Reconnect() error {
 
 	c.sc = sc
 
+	for _, f := range c.arf {
+		f(c)
+	}
+
 	return nil
+}
+
+func (c *client) RegisterAfterReconnectCallback(arf ...AfterReconnectFunc) {
+	c.m.Lock()
+	defer c.m.Unlock()
+
+	c.arf = arf
 }
 
 // Close - close Nats streaming connection and NB! Also Close pure Nats Connection.
