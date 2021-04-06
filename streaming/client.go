@@ -132,7 +132,7 @@ func New(clusterID string, clientID string, nc nc.SimpleNatsClientI, options ...
 // NewOnlyStreaming - create only streaming client.
 // nolint golint
 func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...Option) (*client, error) {
-	c := newDefaultClient()
+	c := NewDefaultClient()
 	c.clusterID = clusterID
 	c.clientID = clientID
 
@@ -161,7 +161,9 @@ func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...O
 	return c, nil
 }
 
-func newDefaultClient() *client {
+// NewDefaultClient  - NewDefaultClient.
+//nolint
+func NewDefaultClient() *client {
 	return &client{
 		log:     logger.Log,
 		RWMutex: sync.RWMutex{},
