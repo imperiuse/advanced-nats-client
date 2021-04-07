@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/imperiuse/advance-nats-client/uuid"
+
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 
@@ -34,15 +36,15 @@ type NatsStreamingClientTestSuit struct {
 // The SetupSuite method will be run by testify once, at the very
 // start of the testing suite, before any tests are run.
 func (suite *NatsStreamingClientTestSuit) SetupSuite() {
-	c, err := NewOnlyStreaming("bad_name_cluster", []URL{"1.2.3.4:1234"})
+	c, err := NewOnlyStreaming("bad_name_cluster", uuid.UUID4(), []URL{"1.2.3.4:1234"})
 	assert.NotNil(suite.T(), err, "must be error!")
 	assert.Nil(suite.T(), c, "must be nil!")
 
-	c, err = NewOnlyStreaming("bad_name_cluster", testDSN)
+	c, err = NewOnlyStreaming("bad_name_cluster", uuid.UUID4(), testDSN)
 	assert.NotNil(suite.T(), err, "must be error!")
 	assert.Nil(suite.T(), c, "must be nil!")
 
-	c, err = NewOnlyStreaming(DefaultClusterID, testDSN)
+	c, err = NewOnlyStreaming(DefaultClusterID, uuid.UUID4(), testDSN)
 	assert.Nil(suite.T(), err, "err must be nil!")
 	assert.NotNil(suite.T(), c, "client be not nil!")
 	assert.Nil(suite.T(), c.nc, "nc must be nil!")
@@ -52,7 +54,7 @@ func (suite *NatsStreamingClientTestSuit) SetupSuite() {
 	assert.Nil(suite.T(), c.Close(), "close problem")
 
 	badNatsClient := nc.NewDefaultClient()
-	c1, err := New(DefaultClusterID, badNatsClient)
+	c1, err := New(DefaultClusterID, uuid.UUID4(), badNatsClient)
 	assert.Equal(suite.T(), ErrNilNatsConn, errors.Cause(err))
 	assert.Nil(suite.T(), c1, "client must be nil!")
 
@@ -60,14 +62,14 @@ func (suite *NatsStreamingClientTestSuit) SetupSuite() {
 	assert.Nil(suite.T(), err, "err must be nil")
 	assert.NotNil(suite.T(), natsClient, "natsClient must be non nil")
 
-	suite.streamingClient, err = New(DefaultClusterID, natsClient)
+	suite.streamingClient, err = New(DefaultClusterID, uuid.UUID4(), natsClient)
 	assert.Nil(suite.T(), err, "err must be nil!")
 	assert.NotNil(suite.T(), suite.streamingClient, "client be not nil!")
 	assert.NotNil(suite.T(), suite.streamingClient.NatsConn(), "NatsConn nc must not be nil!")
 	assert.NotNil(suite.T(), suite.streamingClient.Nats(), "Nats nc must not be nil!")
 	suite.streamingClient.UseCustomLogger(zap.NewNop())
 
-	suite.badStreamingClient, err = New(DefaultClusterID, natsClient)
+	suite.badStreamingClient, err = New(DefaultClusterID, uuid.UUID4(), natsClient)
 	suite.badStreamingClient.UseCustomLogger(zap.NewNop())
 	assert.NotNil(suite.T(), suite.badStreamingClient, "client must be non nil")
 	assert.Nil(suite.T(), err, "err must be nil")

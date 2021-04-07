@@ -38,8 +38,9 @@ type AdvanceNatsClient interface {
 	UseCustomLogger(logger.Logger)
 	NatsConn() *nats.Conn
 	Nats() nc.SimpleNatsClientI
-	Reconnect() error                              // for nats streaming only
-	RegisterAfterReconnectFunc(AfterReconnectFunc) // for nats streaming only
+	Reconnect(bool) error                                    // for nats streaming only
+	RegisterAfterReconnectFunc(nameFunc, AfterReconnectFunc) // for nats streaming only
+	DeregisterAfterReconnectFunc(nameFunc)                   // for nats streaming only
 	Close() error
 }
 
@@ -54,8 +55,11 @@ type (
 
 		m   sync.RWMutex
 		sc  PureNatsStunConnI // StunConnI equals stan.Conn
-		arf []AfterReconnectFunc
+		arf map[nameFunc]AfterReconnectFunc
 	}
+
+	// nameFunc nameFunc.
+	nameFunc = string
 
 	// URL - url.
 	URL = string
@@ -115,7 +119,7 @@ var (
 
 // New - Create Nats Streaming client with instance of Advance Nats client.
 //nolint golint
-func New(clusterID string, nc nc.SimpleNatsClientI, options ...Option) (*client, error) {
+func New(clusterID string, clientID string, nc nc.SimpleNatsClientI, options ...Option) (*client, error) {
 	if nc != nil {
 		if nc.NatsConn() == nil {
 			return nil, errors.Wrap(ErrNilNatsConn, "[New]")
@@ -124,7 +128,7 @@ func New(clusterID string, nc nc.SimpleNatsClientI, options ...Option) (*client,
 		options = append(options, stan.NatsConn(nc.NatsConn()))
 	}
 
-	c, err := NewOnlyStreaming(clusterID, nil, options...)
+	c, err := NewOnlyStreaming(clusterID, clientID, nil, options...)
 	if err != nil || c == nil {
 		return nil, errors.Wrap(err, "[New] NewOnlyStreaming")
 	}
@@ -136,10 +140,15 @@ func New(clusterID string, nc nc.SimpleNatsClientI, options ...Option) (*client,
 
 // NewOnlyStreaming - create only streaming client.
 // nolint golint
-func NewOnlyStreaming(clusterID string, dsn []URL, options ...Option) (*client, error) {
+func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...Option) (*client, error) {
 	c := NewDefaultClient()
 	c.clusterID = clusterID
-	c.clientID = uuid.UUID4()
+
+	if clientID == "" {
+		c.clientID = uuid.UUID4()
+	} else {
+		c.clientID = clientID
+	}
 
 	if options == nil {
 		// Default settings for internal NATS client
@@ -172,6 +181,7 @@ func NewDefaultClient() *client {
 	return &client{
 		log: logger.Log,
 		m:   sync.RWMutex{},
+		arf: make(map[nameFunc]AfterReconnectFunc),
 	}
 }
 
@@ -190,7 +200,7 @@ func (c *client) DefaultNatsStreamingOptions() []Option {
 			for i := 0; i < maxTry; i++ {
 				c.log.Sugar().Infof("[ConnectionLostHandler] Try recreate stan conn: %d", i)
 
-				err := c.Reconnect()
+				err := c.Reconnect(false)
 				if err == nil {
 					c.log.Sugar().Infof("[ConnectionLostHandler] Reconnect successfully: %d", i)
 
@@ -291,7 +301,7 @@ func (c *client) PublishSync(subj Subj, data Serializable) error {
 	c.m.RUnlock()
 
 	if errors.Is(err, stan.ErrConnectionClosed) {
-		return c.Reconnect()
+		return c.Reconnect(false)
 	}
 
 	return err
@@ -327,7 +337,7 @@ func (c *client) PublishAsync(subj Subj, data Serializable, ah AckHandler) (GUID
 	c.m.RUnlock()
 
 	if errors.Is(err, stan.ErrConnectionClosed) {
-		if err = c.Reconnect(); err != nil {
+		if err = c.Reconnect(false); err != nil {
 		}
 	}
 
@@ -467,11 +477,14 @@ func (c *client) NatsConn() *nats.Conn {
 	return c.nc.NatsConn()
 }
 
-func (c *client) Reconnect() error {
+func (c *client) Reconnect(withNewClientID bool) error {
 	c.m.Lock()
 	defer c.m.Unlock()
 
-	c.clientID = uuid.UUID4()
+	if !withNewClientID {
+		c.clientID = uuid.UUID4()
+	}
+
 	sc, err := stan.Connect(c.clusterID, c.clientID, c.options...)
 	if err != nil {
 		return errors.Wrap(err, "[Reconnect] can't create nats streaming connection. stan.Connect - error")
@@ -486,11 +499,18 @@ func (c *client) Reconnect() error {
 	return nil
 }
 
-func (c *client) RegisterAfterReconnectFunc(f AfterReconnectFunc) {
+func (c *client) RegisterAfterReconnectFunc(name string, f AfterReconnectFunc) {
 	c.m.Lock()
 	defer c.m.Unlock()
 
-	c.arf = append(c.arf, f)
+	c.arf[name] = f
+}
+
+func (c *client) DeregisterAfterReconnectFunc(name string) {
+	c.m.Lock()
+	defer c.m.Unlock()
+
+	delete(c.arf, name)
 }
 
 // Close - close Nats streaming connection and NB! Also Close pure Nats Connection.
