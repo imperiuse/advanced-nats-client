@@ -1,5 +1,7 @@
 package streaming
 
+// TODO INTEGRATION MUST DO TEST FOR TESTING RECONNECT BEHAVIOR
+
 import (
 	"context"
 	"fmt"

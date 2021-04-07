@@ -38,9 +38,9 @@ type AdvanceNatsClient interface {
 	UseCustomLogger(logger.Logger)
 	NatsConn() *nats.Conn
 	Nats() nc.SimpleNatsClientI
-	Reconnect(bool) error                                    // for nats streaming only
-	RegisterAfterReconnectFunc(nameFunc, AfterReconnectFunc) // for nats streaming only
-	DeregisterAfterReconnectFunc(nameFunc)                   // for nats streaming only
+	Reconnect(bool) error                                // for nats streaming only
+	RegisterAfterReconnectCallbackChan(chan interface{}) // for nats streaming only
+	DeregisterAfterReconnectCallbackChan()               // for nats streaming only
 	Close() error
 }
 
@@ -53,13 +53,10 @@ type (
 		log logger.Logger
 		nc  nc.SimpleNatsClientI // Simple Nats client (from another package of this library =) )
 
-		m   sync.RWMutex
-		sc  PureNatsStunConnI // StunConnI equals stan.Conn
-		arf map[nameFunc]AfterReconnectFunc
+		m            sync.RWMutex
+		sc           PureNatsStunConnI // StunConnI equals stan.Conn
+		callbackChan chan interface{}
 	}
-
-	// nameFunc nameFunc.
-	nameFunc = string
 
 	// URL - url.
 	URL = string
@@ -179,9 +176,9 @@ func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...O
 //nolint
 func NewDefaultClient() *client {
 	return &client{
-		log: logger.Log,
-		m:   sync.RWMutex{},
-		arf: make(map[nameFunc]AfterReconnectFunc),
+		log:          logger.Log,
+		m:            sync.RWMutex{},
+		callbackChan: nil,
 	}
 }
 
@@ -492,25 +489,29 @@ func (c *client) Reconnect(withNewClientID bool) error {
 
 	c.sc = sc
 
-	for _, f := range c.arf {
-		f(c)
+	if c.callbackChan != nil {
+		select {
+		case c.callbackChan <- new(interface{}):
+		default:
+			c.log.Warn("[Reconnect] full callbackChan")
+		}
 	}
 
 	return nil
 }
 
-func (c *client) RegisterAfterReconnectFunc(name string, f AfterReconnectFunc) {
+func (c *client) RegisterAfterReconnectCallbackChan(ch chan interface{}) {
 	c.m.Lock()
 	defer c.m.Unlock()
 
-	c.arf[name] = f
+	c.callbackChan = ch
 }
 
-func (c *client) DeregisterAfterReconnectFunc(name string) {
+func (c *client) DeregisterAfterReconnectCallbackChan() {
 	c.m.Lock()
 	defer c.m.Unlock()
 
-	delete(c.arf, name)
+	c.callbackChan = nil
 }
 
 // Close - close Nats streaming connection and NB! Also Close pure Nats Connection.
