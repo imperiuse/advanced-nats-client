@@ -33,14 +33,14 @@ type AdvanceNatsClient interface {
 	DefaultAckHandler() AckHandler
 	Subscribe(Subj, Serializable, Handler, ...SubscriptionOption) (Subscription, error)
 	QueueSubscribe(Subj, QueueGroup, Serializable, Handler, ...SubscriptionOption) (Subscription, error)
+	Reconnect(bool) error
+	RegisterAfterReconnectCallbackChan(chan interface{})
+	DeregisterAfterReconnectCallbackChan()
 
 	// General for both NATS and NATS Streaming
 	UseCustomLogger(logger.Logger)
 	NatsConn() *nats.Conn
 	Nats() nc.SimpleNatsClientI
-	Reconnect(bool) error                                // for nats streaming only
-	RegisterAfterReconnectCallbackChan(chan interface{}) // for nats streaming only
-	DeregisterAfterReconnectCallbackChan()               // for nats streaming only
 	Close() error
 }
 
@@ -102,8 +102,9 @@ const EmptyGUID = ""
 
 // nolint golint
 var (
-	DefaultClusterID = "test-cluster"
-	EmptyHandler     = func(*Msg, Serializable) {}
+	DefaultClusterID  = "test-cluster"
+	EmptyHandler      = func(*Msg, Serializable) {}
+	DurableNameOption = stan.DurableName
 )
 
 var (
@@ -372,7 +373,9 @@ func (c *client) Subscribe(subj Subj, awaitData Serializable, handler Handler, o
 			c.log.Warn("[Subscribe] Redelivered msg received",
 				zap.Any("msg", msg),
 				zap.String("subj", string(subj)))
-		} // return // TODO. THINK HERE. WHAT WE NEED TO DO?
+
+			return // TODO. THINK HERE. WHAT WE NEED TO DO?
+		}
 
 		if msg == nil {
 			c.log.Warn("[Subscribe] Msg is nil",
@@ -428,7 +431,9 @@ func (c *client) QueueSubscribe(subj Subj, qG QueueGroup, awaitData Serializable
 				zap.Any("msg", msg),
 				zap.String("subj", string(subj)),
 				zap.String("qgroup", string(qG)))
-		} // return // TODO. THINK HERE. WHAT WE NEED TO DO?
+
+			return // TODO. THINK HERE. WHAT WE NEED TO DO?
+		}
 
 		if msg == nil {
 			c.log.Warn("[QueueSubscribe] Msg is nil",

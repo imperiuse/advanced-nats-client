@@ -178,13 +178,12 @@ func (c *client) Ping(ctx context.Context, subj Subj) (bool, error) {
 	c.log.Debug("Ping", zap.String("subj", string(subj)))
 
 	msg, err := c.conn.RequestWithContext(ctx, string(subj), []byte(pingMsg))
+	if err != nil {
+		return false, errors.Wrap(err, "c.conn.RequestWithContext")
+	}
 
 	if msg == nil {
 		return false, errors.Wrap(ErrEmptyMsg, "msg == nil")
-	}
-
-	if err != nil {
-		return false, errors.Wrap(err, "c.conn.RequestWithContext")
 	}
 
 	return string(msg.Data) == pongMsg, nil
