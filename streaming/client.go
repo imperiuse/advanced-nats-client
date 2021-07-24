@@ -374,7 +374,7 @@ func (c *client) Subscribe(subj Subj, awaitData Serializable, handler Handler, o
 				zap.Any("msg", msg),
 				zap.String("subj", string(subj)))
 
-			return // TODO. THINK HERE. WHAT WE NEED TO DO?
+			//return // Important: Client should have deduplication system on his side
 		}
 
 		if msg == nil {
@@ -432,7 +432,7 @@ func (c *client) QueueSubscribe(subj Subj, qG QueueGroup, awaitData Serializable
 				zap.String("subj", string(subj)),
 				zap.String("qgroup", string(qG)))
 
-			return // TODO. THINK HERE. WHAT WE NEED TO DO?
+			//return // Important: Client should have deduplication system on his side
 		}
 
 		if msg == nil {
