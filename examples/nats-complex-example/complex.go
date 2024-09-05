@@ -7,8 +7,8 @@ import (
 	"os/signal"
 	"time"
 
-	nc "github.com/imperiuse/advance-nats-client/nats"
-	pb "github.com/imperiuse/advance-nats-client/serializable/protobuf"
+	nc "github.com/imperiuse/advanced-nats-client/v1/nats"
+	pb "github.com/imperiuse/advanced-nats-client/v1/serializable/protobuf"
 )
 
 // Don't forget run NATS (you can do it f.e. by `make test_env_up`)

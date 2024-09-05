@@ -6,17 +6,14 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/atomic"
-
-	"go.uber.org/zap"
-
+	"github.com/imperiuse/advanced-nats-client/v1/nats/mocks"
+	m "github.com/imperiuse/advanced-nats-client/v1/serializable/mock"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-
-	"github.com/imperiuse/advance-nats-client/nats/mocks"
-	m "github.com/imperiuse/advance-nats-client/serializable/mock"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 var testDSN = []URL{"nats://127.0.0.1:4223"}

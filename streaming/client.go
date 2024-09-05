@@ -2,15 +2,15 @@ package streaming
 
 import (
 	"context"
-	"fmt"
+	stderrors "errors"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/imperiuse/advance-nats-client/logger"
-	nc "github.com/imperiuse/advance-nats-client/nats"
-	"github.com/imperiuse/advance-nats-client/serializable"
-	"github.com/imperiuse/advance-nats-client/uuid"
+	"github.com/imperiuse/advanced-nats-client/v1/logger"
+	nc "github.com/imperiuse/advanced-nats-client/v1/nats"
+	"github.com/imperiuse/advanced-nats-client/v1/serializable"
+	"github.com/imperiuse/advanced-nats-client/v1/uuid"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/stan.go"
 	"github.com/pkg/errors"
@@ -65,7 +65,8 @@ type (
 	Option = stan.Option
 )
 
-//nolint golint
+// nolint golint
+//
 //go:generate mockery --name=PureNatsStunConnI
 type (
 	// StunConnI represents a connection to the NATS Streaming subsystem. It can Publish and
@@ -116,7 +117,7 @@ var (
 )
 
 // New - Create Nats Streaming client with instance of Advance Nats client.
-//nolint golint
+// nolint golint
 func New(clusterID string, clientID string, nc nc.SimpleNatsClientI, options ...Option) (*client, error) {
 	if nc != nil {
 		if nc.NatsConn() == nil {
@@ -174,7 +175,7 @@ func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...O
 }
 
 // NewDefaultClient  - NewDefaultClient.
-//nolint
+// nolint
 func NewDefaultClient() *client {
 	return &client{
 		log:          logger.Log,
@@ -354,7 +355,7 @@ func (c *client) DefaultAckHandler() AckHandler {
 }
 
 // Subscribe - func for subscribe on any subject, if no options received - default for all options append stan.SetManualAckMode().
-//nolint lll
+// nolint lll
 func (c *client) Subscribe(subj Subj, awaitData Serializable, handler Handler, opt ...SubscriptionOption) (Subscription, error) {
 	// NB! stan.StartWithLastReceived()) - начинает с последнего уже доставленного! с виду кажется дубль
 	opt = append(opt, stan.SetManualAckMode())
@@ -526,13 +527,7 @@ func (c *client) Close() error {
 
 	defer func() {
 		if c.nc != nil {
-			err1 := c.nc.Close()
-
-			if err == nil {
-				err = err1
-			} else {
-				err = errors.Wrap(err, fmt.Sprint(err1))
-			}
+			err = stderrors.Join(err, errors.Wrap(c.nc.Close(), "c.nc.Close"))
 		}
 	}()
 
@@ -541,9 +536,10 @@ func (c *client) Close() error {
 
 	if c.sc != nil {
 		err = c.sc.Close()
-
 		if err != nil {
-			return errors.Wrap(err, "Close stun conn")
+			err = errors.Wrap(err, "c.sc.Close")
+
+			return err
 		}
 	}
 

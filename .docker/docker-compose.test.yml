@@ -1,8 +1,6 @@
-version: '3'
-
 services:
   test-nats-streaming:
-    image: nats-streaming:0.20
+    image: nats-streaming:0.25.6
     container_name: test-nats-streaming
     networks:
       - test-nats-client
