@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imperiuse/advance-nats-client/logger"
-	"github.com/imperiuse/advance-nats-client/serializable"
+	"github.com/imperiuse/advanced-nats-client/v1/logger"
+	"github.com/imperiuse/advanced-nats-client/v1/serializable"
 	"github.com/nats-io/nats.go"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"

@@ -5,9 +5,8 @@ import (
 	"os"
 	"os/signal"
 
-	pb "github.com/imperiuse/advance-nats-client/serializable/protobuf"
-
-	nc "github.com/imperiuse/advance-nats-client/nats"
+	nc "github.com/imperiuse/advanced-nats-client/v1/nats"
+	pb "github.com/imperiuse/advanced-nats-client/v1/serializable/protobuf"
 )
 
 // Secondly, run NATS (you can do it f.e. by `make test_env_up`)

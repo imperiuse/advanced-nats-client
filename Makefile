@@ -1,4 +1,4 @@
-.EXPORT_ALL_VARIABLES:
+make.EXPORT_ALL_VARIABLES:
 
 .PHONY: docker_clean_all
 docker_clean_all:

@@ -4,20 +4,17 @@ jobs:
   tests:
     strategy:
       matrix:
-        go-version: [ 1.15.x ]
-        os: [ ubuntu-latest ] # [ macos-latest, windows-latest ]
+        go-version: [ 1.23.x ]
+        os: [ ubuntu-latest, macos-latest, windows-latest ]
     runs-on: ${{ matrix.os }}
+    services:
+      nats-streaming:
+        image: nats-streaming:0.25.6
+        ports:
+          - "4223:4222"
+          - "8223:8222"
 
     steps:
-      - name: Create Nats Streaming cluster
-        run: sudo docker network create nats-streaming && sudo docker run -d -p 4223:4222 -p 8223:8222 --network nats-streaming nats-streaming:0.19
-
-#      - name: Test connection to cluster
-#        uses: onichandame/nats-client-action@master
-#        with:
-#          servers: "nats://localhost:4223"
-#          cluster: "true"
-
       - name: Install Go
         uses: actions/setup-go@v2
         with:

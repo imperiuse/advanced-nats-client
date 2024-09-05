@@ -9,19 +9,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imperiuse/advance-nats-client/uuid"
-
-	"go.uber.org/atomic"
-	"go.uber.org/zap"
-
+	nc "github.com/imperiuse/advanced-nats-client/v1/nats"
+	"github.com/imperiuse/advanced-nats-client/v1/serializable/mock"
+	"github.com/imperiuse/advanced-nats-client/v1/streaming/mocks"
+	"github.com/imperiuse/advanced-nats-client/v1/uuid"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	mock2 "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-
-	nc "github.com/imperiuse/advance-nats-client/nats"
-	"github.com/imperiuse/advance-nats-client/serializable/mock"
-	"github.com/imperiuse/advance-nats-client/streaming/mocks"
+	"go.uber.org/atomic"
+	"go.uber.org/zap"
 )
 
 var testDSN = []URL{"nats://127.0.0.1:4223"}
@@ -112,7 +109,7 @@ func TestExampleTestSuite(t *testing.T) {
 	suite.Run(t, new(NatsStreamingClientTestSuit))
 }
 
-//All methods that begin with "Test" are run as tests within a suite.
+// All methods that begin with "Test" are run as tests within a suite.
 func (suite *NatsStreamingClientTestSuit) Test_PublishSync() {
 	err := suite.streamingClient.PublishSync("Test_PublishSync", &mock.DataMock{Data: []byte("test_data")})
 	assert.Nil(suite.T(), err, "PublishSync err")

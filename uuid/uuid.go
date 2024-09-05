@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/gofrs/uuid"
-	"github.com/imperiuse/advance-nats-client/logger"
+	"github.com/imperiuse/advanced-nats-client/v1/logger"
 	"go.uber.org/zap"
 )
 

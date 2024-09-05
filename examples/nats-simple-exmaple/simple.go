@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	nc "github.com/imperiuse/advance-nats-client/nats"
+	nc "github.com/imperiuse/advanced-nats-client/v1/nats"
 )
 
 // Firstly run NATS (you can do it f.e. by `make test_env_up`)
