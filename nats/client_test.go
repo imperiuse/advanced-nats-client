@@ -2,6 +2,7 @@ package nats
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -189,8 +190,13 @@ func (suite *NatsClientTestSuit) Test_RequestReply() {
 	}
 	close(sendChan)
 
+	respondersWG := sync.WaitGroup{}
+	respondersWG.Add(1)
+
 	// here server side emulate send request to client
 	go func(sendChan <-chan m.DataMock) {
+		respondersWG.Wait()
+
 		reply := &m.DataMock{}
 		for request := range sendChan {
 			request := request
@@ -202,17 +208,23 @@ func (suite *NatsClientTestSuit) Test_RequestReply() {
 
 	// here client side reply to server
 	go func() {
+		routineWG := sync.WaitGroup{}
+		routineWG.Add(cntMsg)
+
+		respondersWG.Done()
 
 		_, err := suite.natsClient.ReplyHandler(subj, &m.DataMock{}, func(msg *Msg, request Serializable) Serializable {
 			if example, ok := request.(*m.DataMock); ok {
 				assert.NotNil(suite.T(), example, "example must be non nil")
 				assert.Equal(suite.T(), requestData, string(example.Data), "wrong requestData received")
 			}
+			fmt.Println("SKKKKKKK")
+			routineWG.Done()
 			wg.Done()
 			return &m.DataMock{Data: []byte(replyData)}
 		})
 		assert.Nil(suite.T(), err, "Reply handler err")
-		wg.Wait()
+		routineWG.Wait()
 	}()
 
 	wg.Wait()
@@ -257,12 +269,16 @@ func (suite *NatsClientTestSuit) Test_RequestReplyQueue() {
 
 	// here client side reply to server
 	go func() {
+		routineWG := sync.WaitGroup{}
+		routineWG.Add(cntMsg)
+
 		s, err := suite.natsClient.ReplyQueueHandler(subj, qGroup, &m.DataMock{}, func(msg *Msg, request Serializable) Serializable {
 			if example, ok := request.(*m.DataMock); ok {
 				assert.NotNil(suite.T(), example, "example must be non nil")
 				assert.Equal(suite.T(), requestData, string(example.Data), "wrong requestData received")
 			}
 			cnt.Inc()
+			routineWG.Done()
 			wg.Done()
 			return &m.DataMock{Data: []byte(replyData)}
 		})
@@ -275,13 +291,14 @@ func (suite *NatsClientTestSuit) Test_RequestReplyQueue() {
 				assert.Equal(suite.T(), requestData, string(example.Data), "wrong requestData received")
 			}
 			cnt.Inc()
+			routineWG.Done()
 			wg.Done()
 			return &m.DataMock{Data: []byte(replyData)}
 		})
 		defer func() { assert.Nil(suite.T(), s2.Unsubscribe(), "must be nil") }()
 		assert.Nil(suite.T(), err, "Reply handler err")
 
-		wg.Wait()
+		routineWG.Wait()
 	}()
 
 	wg.Wait()
