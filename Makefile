@@ -17,5 +17,5 @@ test_env_down:
 .PHONY: tests
 tests:
 	@echo "Running go tests"
-	go test -timeout 30s -short `go list ./... | grep -v mocks`
+	go test -timeout 30s -race -short `go list ./... | grep -v mocks`
 
