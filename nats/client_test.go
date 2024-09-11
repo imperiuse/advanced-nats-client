@@ -2,7 +2,6 @@ package nats
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -218,7 +217,6 @@ func (suite *NatsClientTestSuit) Test_RequestReply() {
 				assert.NotNil(suite.T(), example, "example must be non nil")
 				assert.Equal(suite.T(), requestData, string(example.Data), "wrong requestData received")
 			}
-			fmt.Println("SKKKKKKK")
 			routineWG.Done()
 			wg.Done()
 			return &m.DataMock{Data: []byte(replyData)}

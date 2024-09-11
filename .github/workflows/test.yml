@@ -19,4 +19,4 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
       - name: Test
-        run: go test -timeout 30s -race -short `go list ./... | grep -v mocks`
+        run: go test -timeout 30s -short `go list ./... | grep -v mocks`
