@@ -1,4 +1,4 @@
-// +build !enable_zap_logger
+//go:build !enable_zap_logger
 
 package logger
 
@@ -8,5 +8,6 @@ type Logger = *zap.Logger
 
 var Log = func() Logger {
 	l, _ := zap.NewProduction()
+
 	return l
 }()
