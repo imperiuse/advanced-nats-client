@@ -2,13 +2,13 @@ package nats
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/imperiuse/advanced-nats-client/v1/nats/mocks"
 	m "github.com/imperiuse/advanced-nats-client/v1/serializable/mock"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
