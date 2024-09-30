@@ -1,9 +1,10 @@
 package streaming
 
-// TODO INTEGRATION MUST DO TEST FOR TESTING RECONNECT BEHAVIOR
+// TODO INTEGRATION: MUST CREATE TESTS FOR RECONNECT BEHAVIOR
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -13,7 +14,6 @@ import (
 	"github.com/imperiuse/advanced-nats-client/v1/serializable/mock"
 	"github.com/imperiuse/advanced-nats-client/v1/streaming/mocks"
 	"github.com/imperiuse/advanced-nats-client/v1/uuid"
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 	mock2 "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -23,29 +23,28 @@ import (
 
 var testDSN = []URL{"nats://127.0.0.1:4223"}
 
-type NatsStreamingClientTestSuit struct {
+type NatsStreamingClientTestSuite struct {
 	suite.Suite
 	ctx                context.Context
 	ctxCancel          context.CancelFunc
-	streamingClient    AdvanceNatsClient
+	streamingClient    AdvancedNatsClient
 	badStreamingClient *client
 	mockStanConn       *mocks.PureNatsStunConnI
 }
 
-// The SetupSuite method will be run by testify once, at the very
-// start of the testing suite, before any tests are run.
-func (suite *NatsStreamingClientTestSuit) SetupSuite() {
+// SetupSuite is called once, before any tests in the suite are run.
+func (suite *NatsStreamingClientTestSuite) SetupSuite() {
 	c, err := NewOnlyStreaming("bad_name_cluster", uuid.UUID4(), []URL{"1.2.3.4:1234"})
-	assert.NotNil(suite.T(), err, "must be error!")
+	assert.NotNil(suite.T(), err, "must be an error!")
 	assert.Nil(suite.T(), c, "must be nil!")
 
 	c, err = NewOnlyStreaming("bad_name_cluster", uuid.UUID4(), testDSN)
-	assert.NotNil(suite.T(), err, "must be error!")
+	assert.NotNil(suite.T(), err, "must be an error!")
 	assert.Nil(suite.T(), c, "must be nil!")
 
 	c, err = NewOnlyStreaming(DefaultClusterID, uuid.UUID4(), testDSN)
-	assert.Nil(suite.T(), err, "err must be nil!")
-	assert.NotNil(suite.T(), c, "client be not nil!")
+	assert.Nil(suite.T(), err, "error must be nil!")
+	assert.NotNil(suite.T(), c, "client must not be nil!")
 	assert.Nil(suite.T(), c.nc, "nc must be nil!")
 	assert.Nil(suite.T(), c.NatsConn(), "NatsConn nc must be nil!")
 	assert.Nil(suite.T(), c.Nats(), "Nats nc must be nil!")
@@ -54,37 +53,31 @@ func (suite *NatsStreamingClientTestSuit) SetupSuite() {
 
 	badNatsClient := nc.NewDefaultClient()
 	c1, err := New(DefaultClusterID, uuid.UUID4(), badNatsClient)
-	assert.Equal(suite.T(), ErrNilNatsConn, errors.Cause(err))
+	assert.ErrorIs(suite.T(), err, ErrNilNatsConn)
 	assert.Nil(suite.T(), c1, "client must be nil!")
 
 	natsClient, err := nc.New(testDSN)
-	assert.Nil(suite.T(), err, "err must be nil")
-	assert.NotNil(suite.T(), natsClient, "natsClient must be non nil")
+	assert.Nil(suite.T(), err, "error must be nil")
+	assert.NotNil(suite.T(), natsClient, "natsClient must not be nil")
 
 	suite.streamingClient, err = New(DefaultClusterID, uuid.UUID4(), natsClient)
-	assert.Nil(suite.T(), err, "err must be nil!")
-	assert.NotNil(suite.T(), suite.streamingClient, "client be not nil!")
+	assert.Nil(suite.T(), err, "error must be nil!")
+	assert.NotNil(suite.T(), suite.streamingClient, "client must not be nil!")
 	assert.NotNil(suite.T(), suite.streamingClient.NatsConn(), "NatsConn nc must not be nil!")
 	assert.NotNil(suite.T(), suite.streamingClient.Nats(), "Nats nc must not be nil!")
 	suite.streamingClient.UseCustomLogger(zap.NewNop())
 
 	suite.badStreamingClient, err = New(DefaultClusterID, uuid.UUID4(), natsClient)
 	suite.badStreamingClient.UseCustomLogger(zap.NewNop())
-	assert.NotNil(suite.T(), suite.badStreamingClient, "client must be non nil")
-	assert.Nil(suite.T(), err, "err must be nil")
+	assert.NotNil(suite.T(), suite.badStreamingClient, "client must not be nil")
+	assert.Nil(suite.T(), err, "error must be nil")
 	mockStanConn := &mocks.PureNatsStunConnI{}
 	suite.badStreamingClient.sc = mockStanConn
 	suite.mockStanConn = mockStanConn
-
-	// Mock configurations down
-	// NB: .Return(...) must return the same signature as the method being mocked.
-	//mockStanConn.On("Close").Return(nil)    // Close()error
-
 }
 
-// The TearDownSuite method will be run by testify once, at the very
-// end of the testing suite, after all tests have been run.
-func (suite *NatsStreamingClientTestSuit) TearDownSuite() {
+// TearDownSuite is called once, after all tests in the suite are run.
+func (suite *NatsStreamingClientTestSuite) TearDownSuite() {
 	err := suite.streamingClient.Close()
 	assert.Nil(suite.T(), err)
 
@@ -94,43 +87,44 @@ func (suite *NatsStreamingClientTestSuit) TearDownSuite() {
 	assert.Nil(suite.T(), err)
 }
 
-// The SetupTest method will be run before every test in the suite.
-func (suite *NatsStreamingClientTestSuit) SetupTest() {
+// SetupTest is called before each test.
+func (suite *NatsStreamingClientTestSuite) SetupTest() {
 	suite.ctx, suite.ctxCancel = context.WithCancel(context.Background())
 }
 
-// The TearDownTest method will be run after every test in the suite.
-func (suite *NatsStreamingClientTestSuit) TearDownTest() {
+// TearDownTest is called after each test.
+func (suite *NatsStreamingClientTestSuite) TearDownTest() {
 }
 
-// In order for 'go test' to run this suite, we need to create
-// a normal test function and pass our suite to suite.Run
+// TestExampleTestSuite runs the test suite.
 func TestExampleTestSuite(t *testing.T) {
-	suite.Run(t, new(NatsStreamingClientTestSuit))
+	suite.Run(t, new(NatsStreamingClientTestSuite))
 }
 
-// All methods that begin with "Test" are run as tests within a suite.
-func (suite *NatsStreamingClientTestSuit) Test_PublishSync() {
+// Test_PublishSync checks synchronous publishing.
+func (suite *NatsStreamingClientTestSuite) Test_PublishSync() {
 	err := suite.streamingClient.PublishSync("Test_PublishSync", &mock.DataMock{Data: []byte("test_data")})
-	assert.Nil(suite.T(), err, "PublishSync err")
+	assert.Nil(suite.T(), err, "PublishSync error")
 
 	err = suite.streamingClient.PublishSync("Test_PublishSync", &mock.BadDataMock{})
-	assert.NotNil(suite.T(), err, "PublishSync must return err")
-	assert.Equal(suite.T(), mock.ErrBadDataMock, errors.Cause(err))
+	assert.NotNil(suite.T(), err, "PublishSync must return an error")
+	assert.ErrorIs(suite.T(), err, mock.ErrBadDataMock)
 }
 
-func (suite *NatsStreamingClientTestSuit) Test_PublishAsync() {
+// Test_PublishAsync checks asynchronous publishing.
+func (suite *NatsStreamingClientTestSuite) Test_PublishAsync() {
 	guid, err := suite.streamingClient.PublishAsync("Test_PublishAsync", &mock.DataMock{Data: []byte("test_data")}, nil)
-	assert.Nil(suite.T(), err, "PublishAsync err")
+	assert.Nil(suite.T(), err, "PublishAsync error")
 	assert.NotEqual(suite.T(), EmptyGUID, guid, "GUID must not be empty")
 
 	guid, err = suite.streamingClient.PublishAsync("Test_PublishAsync", &mock.BadDataMock{}, nil)
-	assert.NotNil(suite.T(), err, "PublishAsync must return err")
-	assert.Equal(suite.T(), mock.ErrBadDataMock, errors.Cause(err))
+	assert.NotNil(suite.T(), err, "PublishAsync must return an error")
+	assert.ErrorIs(suite.T(), err, mock.ErrBadDataMock)
 	assert.Equal(suite.T(), EmptyGUID, guid, "GUID must be empty")
 }
 
-func (suite *NatsStreamingClientTestSuit) Test_Subscribe() {
+// Test_Subscribe checks subscription functionality.
+func (suite *NatsStreamingClientTestSuite) Test_Subscribe() {
 	const (
 		cntMsg   = 5
 		subj     = "Test_Subscribe"
@@ -145,52 +139,55 @@ func (suite *NatsStreamingClientTestSuit) Test_Subscribe() {
 		if ok {
 			assert.Equal(t, testData, string(v.Data))
 		}
-		assert.True(t, ok, "can't type cast")
+		assert.True(t, ok, "cannot type cast")
 		wg.Done()
 	}
 	s, err := suite.streamingClient.Subscribe(subj, &mock.DataMock{}, handler)
 	defer func() { _ = s.Close() }()
-	assert.Nil(t, err, "err must be nil")
+	assert.Nil(t, err, "error must be nil")
 
 	wg.Add(cntMsg * 2)
 	for i := 0; i < cntMsg; i++ {
 		err := suite.streamingClient.PublishSync(subj, &mock.DataMock{Data: []byte(testData)})
-		assert.Nil(t, err, "PublishSync err")
+		assert.Nil(t, err, "PublishSync error")
 
 		guid, err := suite.streamingClient.PublishAsync(subj, &mock.DataMock{Data: []byte(testData)}, nil)
-		assert.Nil(t, err, "PublishAsync err")
+		assert.Nil(t, err, "PublishAsync error")
 		assert.NotEqual(t, EmptyGUID, guid, "GUID must not be empty")
 	}
 
 	wg.Wait()
 }
 
-func (suite *NatsStreamingClientTestSuit) Test_BadPublish() {
+// Test_BadPublish tests publishing when there is an error.
+func (suite *NatsStreamingClientTestSuite) Test_BadPublish() {
 	errBad := errors.New("bad")
 	suite.mockStanConn.On("Publish", mock2.AnythingOfType("string"), mock2.Anything).Return(errBad)
 	suite.mockStanConn.On("PublishAsync", mock2.AnythingOfType("string"), mock2.Anything, mock2.Anything).Return(EmptyGUID, errBad)
 
 	err := suite.badStreamingClient.PublishSync("testSubj", &mock.DataMock{Data: []byte("test_data")})
-	assert.NotNil(suite.T(), err, "must be err")
-	assert.Equal(suite.T(), errBad, errors.Cause(err), "must be equals")
+	assert.NotNil(suite.T(), err, "must be an error")
+	assert.ErrorIs(suite.T(), err, errBad, "must be equal")
 
 	guid, err := suite.badStreamingClient.PublishAsync("testSubj", &mock.DataMock{Data: []byte("test_data")}, suite.badStreamingClient.DefaultAckHandler())
-	assert.NotNil(suite.T(), err, "must be err")
-	assert.Equal(suite.T(), errBad, err, "must be equals")
-	assert.Equal(suite.T(), EmptyGUID, guid, "must be equals")
+	assert.NotNil(suite.T(), err, "must be an error")
+	assert.Equal(suite.T(), errBad, err, "must be equal")
+	assert.Equal(suite.T(), EmptyGUID, guid, "must be equal")
 }
 
-func (suite *NatsStreamingClientTestSuit) Test_BadSubscribe() {
+// Test_BadSubscribe tests subscription with an error.
+func (suite *NatsStreamingClientTestSuite) Test_BadSubscribe() {
 	errBad := errors.New("bad")
-	suite.mockStanConn.On("Subscribe", mock2.AnythingOfType("string"), mock2.AnythingOfType("MsgHandler"), mock2.AnythingOfType("SubscriptionOption")).Return(nil, errBad) // Subscribe(subj string, cb MsgHandler) (*Subscription, error)
+	suite.mockStanConn.On("Subscribe", mock2.AnythingOfType("string"), mock2.AnythingOfType("MsgHandler"), mock2.AnythingOfType("SubscriptionOption")).Return(nil, errBad)
 
 	s, err := suite.badStreamingClient.Subscribe("testSubj", &mock.DataMock{}, EmptyHandler)
 	assert.Nil(suite.T(), s, "must be nil")
-	assert.NotNil(suite.T(), err, "must be err")
-	assert.Equal(suite.T(), errBad, errors.Cause(err), "must be equals")
+	assert.NotNil(suite.T(), err, "must be an error")
+	assert.Equal(suite.T(), err, errBad, "must be equal")
 }
 
-func (suite *NatsStreamingClientTestSuit) Test_PingPongDummyTest() {
+// Test_PingPongDummyTest tests ping-pong functionality.
+func (suite *NatsStreamingClientTestSuite) Test_PingPongDummyTest() {
 	const (
 		subj     = "Test_PingPongDummyTest"
 		queue    = subj
@@ -257,7 +254,7 @@ func (suite *NatsStreamingClientTestSuit) Test_PingPongDummyTest() {
 	assert.False(suite.T(), result, "Ping must be false")
 }
 
-func (suite *NatsStreamingClientTestSuit) Test_RequestDummyTest() {
+func (suite *NatsStreamingClientTestSuite) Test_RequestDummyTest() {
 	const (
 		timeout = time.Second
 		subj    = "Test_RequestDummyTest"
@@ -286,7 +283,7 @@ func (suite *NatsStreamingClientTestSuit) Test_RequestDummyTest() {
 	wg.Wait()
 }
 
-func (suite *NatsStreamingClientTestSuit) Test_RequestQueueDummyTest() {
+func (suite *NatsStreamingClientTestSuite) Test_RequestQueueDummyTest() {
 	const (
 		timeout = time.Second
 		subj    = "Test_RequestQueueDummyTest"
@@ -331,26 +328,26 @@ func (suite *NatsStreamingClientTestSuit) Test_RequestQueueDummyTest() {
 	assert.Equal(suite.T(), 1, int(cnt.Load()))
 }
 
-func (suite *NatsStreamingClientTestSuit) Test_CheckNilNatsClient() {
+func (suite *NatsStreamingClientTestSuite) Test_CheckNilNatsClient() {
 	c := client{}
 
 	_, err := c.ReplyHandler("", &mock.DataMock{}, nil)
-	assert.Equal(suite.T(), ErrNilNatsClient, errors.Cause(err))
+	assert.ErrorIs(suite.T(), err, ErrNilNatsClient)
 
 	err = c.Request(context.Background(), "", &mock.DataMock{}, &mock.DataMock{})
-	assert.Equal(suite.T(), ErrNilNatsClient, errors.Cause(err))
+	assert.ErrorIs(suite.T(), err, ErrNilNatsClient)
 
 	_, err = c.PongHandler("")
-	assert.Equal(suite.T(), ErrNilNatsClient, errors.Cause(err))
+	assert.ErrorIs(suite.T(), err, ErrNilNatsClient)
 
 	_, err = c.Ping(context.Background(), "")
-	assert.Equal(suite.T(), ErrNilNatsClient, errors.Cause(err))
+	assert.ErrorIs(suite.T(), err, ErrNilNatsClient)
 
 	_, err = c.PongQueueHandler("", "")
-	assert.Equal(suite.T(), ErrNilNatsClient, errors.Cause(err))
+	assert.ErrorIs(suite.T(), err, ErrNilNatsClient)
 }
 
-func (suite *NatsStreamingClientTestSuit) Test_QueueSubscribe() {
+func (suite *NatsStreamingClientTestSuite) Test_QueueSubscribe() {
 	const (
 		cntMsg = 5
 		data   = "data"
@@ -413,7 +410,7 @@ func (suite *NatsStreamingClientTestSuit) Test_QueueSubscribe() {
 	wgQ3.Wait()
 }
 
-func (suite *NatsStreamingClientTestSuit) Test_QueueSubscribeSerializable() {
+func (suite *NatsStreamingClientTestSuite) Test_QueueSubscribeSerializable() {
 	const (
 		cntMsg = 5
 		data   = "data"
@@ -449,12 +446,12 @@ func (suite *NatsStreamingClientTestSuit) Test_QueueSubscribeSerializable() {
 	wg.Wait()
 }
 
-func (suite *NatsStreamingClientTestSuit) Test_BadQueueSubscriber() {
+func (suite *NatsStreamingClientTestSuite) Test_BadQueueSubscriber() {
 	errBad := errors.New("bad")
 	suite.mockStanConn.On("QueueSubscribe", mock2.AnythingOfType("string"), mock2.AnythingOfType("string"), mock2.Anything, mock2.Anything).Return(nil, errBad) // Subscribe(subj string, cb MsgHandler) (*Subscription, error)
 
 	s, err := suite.badStreamingClient.QueueSubscribe("testSubj", "testQ", &mock.DataMock{}, EmptyHandler)
 	assert.Nil(suite.T(), s, "must be nil")
 	assert.NotNil(suite.T(), err, "must be err")
-	assert.Equal(suite.T(), errBad, errors.Cause(err), "must be equals")
+	assert.Equal(suite.T(), err, errBad, "must be equals")
 }

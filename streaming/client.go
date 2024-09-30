@@ -2,23 +2,24 @@ package streaming
 
 import (
 	"context"
-	stderrors "errors"
+	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/stan.go"
+	"go.uber.org/zap"
 
 	"github.com/imperiuse/advanced-nats-client/v1/logger"
 	nc "github.com/imperiuse/advanced-nats-client/v1/nats"
 	"github.com/imperiuse/advanced-nats-client/v1/serializable"
 	"github.com/imperiuse/advanced-nats-client/v1/uuid"
-	"github.com/nats-io/nats.go"
-	"github.com/nats-io/stan.go"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
-// AdvanceNatsClient - advance nats / nats streaming client.
-type AdvanceNatsClient interface {
+// AdvancedNatsClient - advance nats / nats streaming client.
+type AdvancedNatsClient interface {
 	// NATS @see -> nc.SimpleNatsClientI
 	Ping(context.Context, nc.Subj) (bool, error)
 	PongHandler(nc.Subj) (*nc.Subscription, error)
@@ -34,7 +35,7 @@ type AdvanceNatsClient interface {
 	Subscribe(Subj, Serializable, Handler, ...SubscriptionOption) (Subscription, error)
 	QueueSubscribe(Subj, QueueGroup, Serializable, Handler, ...SubscriptionOption) (Subscription, error)
 	Reconnect(bool) error
-	RegisterAfterReconnectCallbackChan(chan interface{})
+	RegisterAfterReconnectCallbackChan(chan any)
 	DeregisterAfterReconnectCallbackChan()
 
 	// General for both NATS and NATS Streaming
@@ -55,7 +56,7 @@ type (
 
 		m            sync.RWMutex
 		sc           PureNatsStunConnI // StunConnI equals stan.Conn
-		callbackChan chan interface{}
+		callbackChan chan any
 	}
 
 	// URL - url.
@@ -95,7 +96,7 @@ type (
 
 	Serializable = serializable.Serializable
 
-	AfterReconnectFunc = func(anc AdvanceNatsClient)
+	AfterReconnectFunc = func(anc AdvancedNatsClient)
 )
 
 // EmptyGUID  "".
@@ -121,7 +122,7 @@ var (
 func New(clusterID string, clientID string, nc nc.SimpleNatsClientI, options ...Option) (*client, error) {
 	if nc != nil {
 		if nc.NatsConn() == nil {
-			return nil, errors.Wrap(ErrNilNatsConn, "[New]")
+			return nil, fmt.Errorf("[New]: %w", ErrNilNatsConn)
 		}
 
 		options = append(options, stan.NatsConn(nc.NatsConn()))
@@ -129,7 +130,7 @@ func New(clusterID string, clientID string, nc nc.SimpleNatsClientI, options ...
 
 	c, err := NewOnlyStreaming(clusterID, clientID, nil, options...)
 	if err != nil || c == nil {
-		return nil, errors.Wrap(err, "[New] NewOnlyStreaming")
+		return nil, fmt.Errorf("[New] NewOnlyStreaming: %w", err)
 	}
 
 	c.nc = nc
@@ -163,7 +164,7 @@ func NewOnlyStreaming(clusterID string, clientID string, dsn []URL, options ...O
 
 	sc, err := stan.Connect(c.clusterID, c.clientID, c.options...)
 	if err != nil {
-		return nil, errors.Wrap(err, "[NewOnlyStreaming] can't create nats-streaming conn")
+		return nil, fmt.Errorf("[NewOnlyStreaming] can't create nats-streaming conn: %w", err)
 	}
 
 	c.m.Lock()
@@ -221,7 +222,7 @@ func (c *client) DefaultNatsStreamingOptions() []Option {
 // Ping - under the hood wrapper for nc.Ping.
 func (c *client) Ping(ctx context.Context, subj nc.Subj) (bool, error) {
 	if c.nc == nil {
-		return false, errors.Wrap(ErrNilNatsClient, "[Ping]")
+		return false, fmt.Errorf("[Ping]: %w", ErrNilNatsClient)
 	}
 
 	return c.nc.Ping(ctx, subj)
@@ -230,7 +231,7 @@ func (c *client) Ping(ctx context.Context, subj nc.Subj) (bool, error) {
 // PongHandler - under the hood wrapper for nc.PongHandler.
 func (c *client) PongHandler(subj nc.Subj) (*nc.Subscription, error) {
 	if c.nc == nil {
-		return nil, errors.Wrap(ErrNilNatsClient, "[PongHandler]")
+		return nil, fmt.Errorf("[PongHandler]: %w", ErrNilNatsClient)
 	}
 
 	return c.nc.PongHandler(subj)
@@ -239,16 +240,16 @@ func (c *client) PongHandler(subj nc.Subj) (*nc.Subscription, error) {
 // PongQueueHandler - under the hood wrapper for nc.PongQueueHandler.
 func (c *client) PongQueueHandler(subj nc.Subj, qgroup nc.QueueGroup) (*nc.Subscription, error) {
 	if c.nc == nil {
-		return nil, errors.Wrap(ErrNilNatsClient, "[PongQueueHandler]")
+		return nil, fmt.Errorf("[PongQueueHandler]: %w", ErrNilNatsClient)
 	}
 
 	return c.nc.PongQueueHandler(subj, qgroup)
 }
 
 // Request under the hood used simple NATS connect and simple Request-Reply semantic with at most once guarantee.
-func (c *client) Request(ctx context.Context, subj Subj, requestData Serializable, replyData Serializable) error {
+func (c *client) Request(ctx context.Context, subj Subj, requestData, replyData Serializable) error {
 	if c.nc == nil {
-		return errors.Wrap(ErrNilNatsClient, "[Request]")
+		return fmt.Errorf("[Request]: %w", ErrNilNatsClient)
 	}
 
 	return c.nc.Request(ctx, subj, requestData, replyData)
@@ -257,7 +258,7 @@ func (c *client) Request(ctx context.Context, subj Subj, requestData Serializabl
 // ReplyHandler under the hood used simple Advance NATS client, Reply semantic with at most once.
 func (c *client) ReplyHandler(subj Subj, awaitData Serializable, msgHandler nc.Handler) (*nc.Subscription, error) {
 	if c.nc == nil {
-		return nil, errors.Wrap(ErrNilNatsClient, "[ReplyHandler]")
+		return nil, fmt.Errorf("[ReplyHandler]: %w", ErrNilNatsClient)
 	}
 
 	return c.nc.ReplyHandler(subj, awaitData, msgHandler)
@@ -266,7 +267,7 @@ func (c *client) ReplyHandler(subj Subj, awaitData Serializable, msgHandler nc.H
 // ReplyQueueHandler under the hood used simple Advance NATS client, Reply semantic with at most once.
 func (c *client) ReplyQueueHandler(subj Subj, qG QueueGroup, awD Serializable, h nc.Handler) (*nc.Subscription, error) {
 	if c.nc == nil {
-		return nil, errors.Wrap(ErrNilNatsClient, "[ReplyQueueHandler]")
+		return nil, fmt.Errorf("[ReplyQueueHandler]: %w", ErrNilNatsClient)
 	}
 
 	return c.nc.ReplyQueueHandler(subj, qG, awD, h)
@@ -292,7 +293,7 @@ func (c *client) PublishSync(subj Subj, data Serializable) error {
 			zap.Error(err),
 		)
 
-		return errors.Wrap(err, "[PublishSync]")
+		return fmt.Errorf("[PublishSync]: %w", err)
 	}
 
 	c.m.RLock()
@@ -320,7 +321,7 @@ func (c *client) PublishAsync(subj Subj, data Serializable, ah AckHandler) (GUID
 			zap.String("subj", string(subj)),
 			zap.Error(err))
 
-		return EmptyGUID, errors.Wrap(err, "[PublishAsync]")
+		return EmptyGUID, fmt.Errorf("[PublishAsync]: %w", err)
 	}
 
 	if ah == nil {
@@ -490,14 +491,14 @@ func (c *client) Reconnect(withNewClientID bool) error {
 
 	sc, err := stan.Connect(c.clusterID, c.clientID, c.options...)
 	if err != nil {
-		return errors.Wrap(err, "[Reconnect] can't create nats streaming connection. stan.Connect - error")
+		return fmt.Errorf("[Reconnect] can't create nats streaming connection. stan.Connect - error: %w", err)
 	}
 
 	c.sc = sc
 
 	if c.callbackChan != nil {
 		select {
-		case c.callbackChan <- new(interface{}):
+		case c.callbackChan <- new(any):
 		default:
 			c.log.Warn("[Reconnect] full callbackChan")
 		}
@@ -506,7 +507,7 @@ func (c *client) Reconnect(withNewClientID bool) error {
 	return nil
 }
 
-func (c *client) RegisterAfterReconnectCallbackChan(ch chan interface{}) {
+func (c *client) RegisterAfterReconnectCallbackChan(ch chan any) {
 	c.m.Lock()
 	defer c.m.Unlock()
 
@@ -527,7 +528,7 @@ func (c *client) Close() error {
 
 	defer func() {
 		if c.nc != nil {
-			err = stderrors.Join(err, errors.Wrap(c.nc.Close(), "c.nc.Close"))
+			err = errors.Join(err, fmt.Errorf("c.nc.Close: %w", c.nc.Close()))
 		}
 	}()
 
@@ -537,7 +538,7 @@ func (c *client) Close() error {
 	if c.sc != nil {
 		err = c.sc.Close()
 		if err != nil {
-			err = errors.Wrap(err, "c.sc.Close")
+			err = fmt.Errorf("c.sc.Close: %w", err)
 
 			return err
 		}

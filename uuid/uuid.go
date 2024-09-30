@@ -1,19 +1,18 @@
 package uuid
 
 import (
-	"fmt"
-
 	"github.com/gofrs/uuid"
-	"github.com/imperiuse/advanced-nats-client/v1/logger"
 	"go.uber.org/zap"
+
+	"github.com/imperiuse/advanced-nats-client/v1/logger"
 )
 
 type (
-	// UUID = uuid.UUID.
+	// UUID is an alias for uuid.UUID.
 	UUID = uuid.UUID
 )
 
-// EmptyStringUUID = all zero.
+// EmptyStringUUID is a UUID string with all zeroes.
 var (
 	EmptyStringUUID  = "00000000-0000-0000-0000-000000000000"
 	EmptyStringUUIDb = [16]byte{
@@ -21,33 +20,34 @@ var (
 	}
 )
 
-// MustUUID4 - YES it's panic, use in init or example case only! Please be carefully!
+// MustUUID4 generates a UUID v4. It panics in case of an error. Use only in initialization or example cases.
+// Please be cautious with this function!
 func MustUUID4() string {
 	uid, err := uuid.NewV4()
 	if err != nil {
 		panic(err)
 	}
 
-	return fmt.Sprint(uid)
+	return uid.String()
 }
 
-// UUID4 - return string presentation of UUID ver4 use uuid.NewV4() under the hood.
+// UUID4 returns a string representation of a UUID v4 using uuid.NewV4() under the hood.
 func UUID4() string {
 	uid, err := uuid.NewV4()
 	if err != nil {
-		logger.Log.Error("UUID V4 generate error", zap.Error(err))
+		logger.Log.Error("UUID v4 generation error", zap.Error(err))
 
 		return EmptyStringUUID
 	}
 
-	return fmt.Sprint(uid)
+	return uid.String()
 }
 
-// UUID4b - return [16]byte presentation of UUID ver4 use uuid.NewV4() under the hood.
+// UUID4b returns a [16]byte representation of a UUID v4 using uuid.NewV4() under the hood.
 func UUID4b() [16]byte {
 	uid, err := uuid.NewV4()
 	if err != nil {
-		logger.Log.Error("UUID V4 generate error", zap.Error(err))
+		logger.Log.Error("UUID v4 generation error", zap.Error(err))
 
 		return EmptyStringUUIDb
 	}
